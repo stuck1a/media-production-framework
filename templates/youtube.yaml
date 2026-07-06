@@ -41,7 +41,7 @@ rendering:
     horizontal: center         # left | center | right
   karaoke:
     enabled: false
-    style: sweep         # classic | sweep | glow
+    style: classic         # classic | sweep | glow
 
 ffmpeg:
   preset: slow         # ultrafast | superfast | veryfast | faster | fast | medium | slow | slower | veryslow

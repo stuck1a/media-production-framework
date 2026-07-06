@@ -40,7 +40,7 @@ rendering:
     vertical: bottom         # top | middle | bottom
     horizontal: center         # left | center | right
   karaoke:
-    enabled: false
+    enabled: true
     style: sweep         # classic | sweep | glow
 
 ffmpeg:

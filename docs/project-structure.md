@@ -17,7 +17,7 @@ The objective is to keep the project organized, scalable and easy to navigate.
 
 ```
 media-production-framework/
-¦
+|
 +-- src/
 +-- tests/
 +-- docs/
@@ -27,7 +27,7 @@ media-production-framework/
 +-- scripts/
 +-- tools/
 +-- .github/
-¦
+|
 +-- pyproject.toml
 +-- README.md
 +-- LICENSE
