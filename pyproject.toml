@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "media-production-framework"
+version = "0.1.1"
+description = "A modular framework for creating lyric videos, karaoke videos and other media production workflows."
+readme = "README.md"
+requires-python = ">=3.14"
+license = { file = "LICENSE" }
+
+authors = [
+    { name = "Marc Becker" }
+]
+
+keywords = [
+    "lyrics",
+    "karaoke",
+    "subtitle",
+    "video",
+    "ffmpeg",
+    "media",
+    "rendering",
+    "automation"
+]
+
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+
+[project.urls]
+Homepage = "https://github.com/stuck1a/media-production-framework"
+Repository = "https://github.com/stuck1a/media-production-framework"
+Issues = "https://github.com/stuck1a/media-production-framework/issues"
+
+[project.scripts]
+mpf = "media_production_framework.main:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true

@@ -1,0 +1,49 @@
+input:
+  audio: MySong.wav          # supported: wav, mp3, flac, m4a, ogg, opus, aac, wma, ...
+  lyrics: MySong_lyrics.txt          # one line = one subtitle segment
+  metadata: metadata.txt          # optional FFMETADATA1 file
+
+output:
+  video: MySong (Lyricsvideo).mp4          # supported: mp4, mkv, mov
+
+subtitles:
+  enabled: true          # create a regular SRT file
+  model: "D:/Programming Workspace/ClaudeWorkspace/whatsapp-transscriber/models/large-v3.pt"         # path to an OpenAI whisper model (*.pt file)
+  language: de          # ISO-639-1 language code (de, en, fr, es, it, ...)
+  file: MySong.de_DE.srt
+
+rendering:
+  video:
+    resolution: 1920x1080          # common values: 1280x720 (HD) / 1920x1080 / 2560x1440 / 3840x2160 (4K)
+    fps: 30          # e.g. 24 / 25 / 30 / 50 / 60
+    bitrate: 320K          # examples: 320K / 8M / 12M / 20M
+  background:
+    type: video          # color | image | video
+    source: background_loop_sample.mp4          # image/video path or "#RRGGBB" if type=color
+    loop: true         # only used for videos
+  text:
+    container:
+      width: 80%
+      padding_top: 5%
+      padding_bottom: 8%
+    font:
+      name: Montserrat
+      size: 72         # ignored if text.font.mode = auto
+      max_lines: 3
+      min_size: 42
+      max_size: 84
+    color: "#FFFFFF"
+    bold: true
+    italic: false
+    outline: 4         # pixels
+    shadow: 2         # pixels
+    vertical: bottom         # top | middle | bottom
+    horizontal: center         # left | center | right
+  karaoke:
+    enabled: true
+    style: sweep         # classic | sweep | glow
+
+ffmpeg:
+  preset: slow         # ultrafast | superfast | veryfast | faster | fast | medium | slow | slower | veryslow
+  crf: 18         # 0-51 (lower = higher quality and size)
+  sample_rate: 48000         # 44100 / 48000
