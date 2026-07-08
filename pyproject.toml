@@ -28,7 +28,7 @@ keywords = [
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",
@@ -36,7 +36,9 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio",
 ]
 
-dependencies = []
+dependencies = [
+    "PyYAML",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -62,6 +64,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100
@@ -79,3 +82,7 @@ select = [
 [tool.mypy]
 python_version = "3.14"
 strict = true
+
+[[tool.mypy.overrides]]
+module = ["yaml"]
+ignore_missing_imports = true

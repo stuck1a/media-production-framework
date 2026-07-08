@@ -30,7 +30,7 @@ Architecture quality takes precedence over release speed.
 ---
 
 # Milestone M1 — Core Foundation
-- Done? [ ]
+- Done? [x]
 
 ## Goals
 
@@ -38,21 +38,24 @@ Establish the technical foundation of the framework.
 
 ### Planned Features
 
-- Project structure
-- Configuration system
-- Logging system
-- Event system
-- Pipeline infrastructure
-- Domain objects
-- Provider infrastructure
-- CLI entry point
-- Basic project loading
-- Basic validation
-- Automated testing infrastructure
+- [x] Project structure
+- [x] Configuration system
+- [x] Logging system
+- [x] Event system
+- [x] Pipeline infrastructure
+- [x] Domain objects
+- [x] Provider infrastructure
+- [x] CLI entry point
+- [x] Basic project loading
+- [x] Basic validation
+- [x] Automated testing infrastructure
 
 ### Exit Criteria
 
 The framework can execute a complete processing pipeline, even if individual stages are still placeholders.
+
+Status: Satisfied by the M1 core pipeline (`configuration`, `project-loading`,
+`provider-initialization`, `placeholder-processing`) and automated foundation tests.
 
 ---
 
