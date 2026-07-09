@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Milestone M3 Part 1 (Rendering foundation): `rendering` and `ffmpeg`
+  configuration sections (`configuration.py`) with per-key validation for
+  video format, background source, text/font/container layout and karaoke
+  (parsed and reserved for M4).
+- Rendering domain model (`rendering.py`): `RenderSettings`, `RenderJob`,
+  `RenderPlan`, `BackgroundOperation`, `RenderProgress` and `RenderResult`.
+- Pluggable render backend seam (`render_backends.py`): `RenderBackend`
+  protocol, `RenderBackendFactory`, `RenderService` and the default offline
+  `DryRunRenderBackend` that plans a render without executing any tooling
+  (see ADR-0002).
+- Rendering events (`RenderingStartedEvent`, `RenderingProgressEvent`,
+  `RenderingCompletedEvent`, `PreviewRenderingCompletedEvent`).
+- Optional `render` dependency extra (`Pillow`) for text measurement and
+  rasterization in later M3 parts.
+- ADR-0002 documenting the render-backend architecture (plan/execute split,
+  dry-run testing strategy, Pillow and FFmpeg-as-subprocess choices).
 - Milestone M2 (Subtitle Generation): provider-based Alignment Engine with
   `heuristic` (offline, deterministic default), `stable-whisper` and
   `faster-whisper` providers (see ADR-0001).

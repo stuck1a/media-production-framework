@@ -47,6 +47,9 @@ dev = [
     "ruff",
     "mypy",
 ]
+render = [
+    "Pillow",
+]
 whisper = [
     "stable-ts",
 ]

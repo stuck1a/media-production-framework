@@ -94,6 +94,40 @@ class SubtitleExportCompletedEvent(Event):
     json_path: str = ""
 
 
+@dataclass(frozen=True)
+class RenderingStartedEvent(Event):
+    """Published when video rendering starts."""
+
+    backend: str = ""
+    preview: bool = False
+
+
+@dataclass(frozen=True)
+class RenderingProgressEvent(Event):
+    """Published periodically while a render is in progress (FR-032)."""
+
+    fraction: float = 0.0
+    completed_seconds: float = 0.0
+    total_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class RenderingCompletedEvent(Event):
+    """Published after video rendering completes."""
+
+    backend: str = ""
+    output_path: str = ""
+    success: bool = False
+
+
+@dataclass(frozen=True)
+class PreviewRenderingCompletedEvent(Event):
+    """Published after a preview render completes (FR-033/FR-034)."""
+
+    backend: str = ""
+    output_path: str = ""
+
+
 EventT = TypeVar("EventT", bound=Event)
 EventHandler = Callable[[EventT], None]
 
