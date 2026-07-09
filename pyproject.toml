@@ -47,6 +47,13 @@ dev = [
     "ruff",
     "mypy",
 ]
+whisper = [
+    "stable-ts",
+]
+faster-whisper = [
+    "stable-ts",
+    "faster-whisper",
+]
 
 [project.urls]
 Homepage = "https://github.com/stuck1a/media-production-framework"
@@ -84,5 +91,5 @@ python_version = "3.14"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["yaml"]
+module = ["yaml", "stable_whisper"]
 ignore_missing_imports = true

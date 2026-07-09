@@ -60,7 +60,7 @@ Status: Satisfied by the M1 core pipeline (`configuration`, `project-loading`,
 ---
 
 # Milestone M2 — Subtitle Generation
-- Done? [ ]
+- Done? [x]
 
 ## Goals
 
@@ -68,19 +68,24 @@ Produce accurate subtitle timing.
 
 ### Planned Features
 
-- [ ] Whisper provider
-- [ ] Faster-Whisper provider
-- [ ] Forced alignment
-- [ ] JSON export
-- [ ] Segment SRT export
-- [ ] Automatic line wrapping
-- [ ] Metadata preservation
-- [ ] Lyrics parsing
-- [ ] Subtitle validation
+- [x] Whisper provider
+- [x] Faster-Whisper provider
+- [x] Forced alignment
+- [x] JSON export
+- [x] Segment SRT export
+- [x] Automatic line wrapping
+- [x] Metadata preservation
+- [x] Lyrics parsing
+- [x] Subtitle validation
 
 ### Exit Criteria
 
 Subtitle generation is production-ready.
+
+Status: Satisfied by the `subtitle-alignment` and `subtitle-export` pipeline
+stages, the provider-based Alignment Engine (`heuristic`, `stable-whisper`,
+`faster-whisper`; see ADR-0001), FFMETADATA1 metadata preservation and
+automated tests covering lyrics parsing, alignment, validation and export.
 
 ---
 

@@ -4,12 +4,40 @@ Core domain objects for the Media Production Framework.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from media_production_framework.configuration import ProjectConfiguration
+
+
+@dataclass(frozen=True)
+class SongMetadata:
+    """Song metadata associated with a project.
+
+    Metadata is treated as a first-class project asset (FR-056) so it can be
+    preserved throughout the production pipeline. Values are kept in a generic
+    field mapping to stay independent of any particular metadata container
+    format, with convenience accessors for the most common fields.
+    """
+
+    fields: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def title(self) -> str | None:
+        """Return the song title if present."""
+
+        value = self.fields.get("title")
+        return str(value) if value is not None else None
+
+    @property
+    def artist(self) -> str | None:
+        """Return the song artist if present."""
+
+        value = self.fields.get("artist")
+        return str(value) if value is not None else None
 
 
 @dataclass(frozen=True)

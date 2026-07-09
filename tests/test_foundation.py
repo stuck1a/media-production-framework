@@ -96,7 +96,7 @@ def test_provider_registry_registers_and_queries_capabilities() -> None:
         registry.register(ProviderDescriptor(name="placeholder"))
 
 
-def test_core_pipeline_executes_all_m1_stages(tmp_path: Path) -> None:
+def test_core_pipeline_executes_all_stages(tmp_path: Path) -> None:
     context = run_pipeline(configuration_path=write_project(tmp_path), log_level="CRITICAL")
 
     stage_events = [
@@ -109,10 +109,12 @@ def test_core_pipeline_executes_all_m1_stages(tmp_path: Path) -> None:
         "configuration",
         "project-loading",
         "provider-initialization",
-        "placeholder-processing",
+        "subtitle-alignment",
+        "subtitle-export",
+        "rendering-placeholder",
     ]
     assert context.project is not None
-    assert context.artifacts["placeholder_processing_completed"] is True
+    assert context.artifacts["rendering_placeholder_completed"] is True
 
 
 def test_cli_executes_core_pipeline(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -121,4 +123,4 @@ def test_cli_executes_core_pipeline(tmp_path: Path, capsys: pytest.CaptureFixtur
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert "pipeline completed (4 stages)" in captured.out
+    assert "pipeline completed (6 stages)" in captured.out

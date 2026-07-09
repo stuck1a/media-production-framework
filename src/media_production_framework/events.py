@@ -64,6 +64,36 @@ class ValidationFailedEvent(Event):
     message: str = ""
 
 
+@dataclass(frozen=True)
+class AlignmentStartedEvent(Event):
+    """Published when subtitle alignment starts."""
+
+    provider: str = ""
+
+
+@dataclass(frozen=True)
+class AlignmentCompletedEvent(Event):
+    """Published after subtitle alignment completes."""
+
+    provider: str = ""
+    segment_count: int = 0
+
+
+@dataclass(frozen=True)
+class SubtitleGeneratedEvent(Event):
+    """Published when a subtitle document has been generated."""
+
+    segment_count: int = 0
+
+
+@dataclass(frozen=True)
+class SubtitleExportCompletedEvent(Event):
+    """Published after subtitle files have been written to disk."""
+
+    srt_path: str = ""
+    json_path: str = ""
+
+
 EventT = TypeVar("EventT", bound=Event)
 EventHandler = Callable[[EventT], None]
 

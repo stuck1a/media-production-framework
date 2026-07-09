@@ -8,6 +8,7 @@ output:
 
 subtitles:
   enabled: true          # create a regular SRT file
+  provider: stable-whisper          # heuristic | stable-whisper | faster-whisper
   model: "D:/Programming Workspace/ClaudeWorkspace/whatsapp-transscriber/models/large-v3.pt"         # path to an OpenAI whisper model (*.pt file)
   language: de          # ISO-639-1 language code (de, en, fr, es, it, ...)
   file: MySong.de_DE.srt

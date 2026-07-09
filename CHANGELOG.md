@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Milestone M2 (Subtitle Generation): provider-based Alignment Engine with
+  `heuristic` (offline, deterministic default), `stable-whisper` and
+  `faster-whisper` providers (see ADR-0001).
+- Lyrics parsing (`lyrics.py`), word-preserving text wrapping
+  (`text_wrapping.py`), FFMETADATA1 metadata parsing (`metadata.py`) and WAV
+  duration inspection (`audio.py`).
+- Subtitle domain model (`subtitles.py`) with segment- and word-level timing,
+  subtitle validation (`subtitle_validation.py`), and interchangeable SRT/JSON
+  exporters (`subtitle_export.py`).
+- New `subtitle-alignment` and `subtitle-export` pipeline stages, wired into
+  the core pipeline between provider initialization and rendering.
+- `subtitles` configuration section (`enabled`, `provider`, `model`,
+  `language`, `file`, `max_line_length`, `audio_duration_seconds`).
+
+### Changed
+- Renamed the final placeholder pipeline stage from `placeholder-processing`
+  to `rendering-placeholder` to reflect that subtitle generation is no longer
+  a placeholder.
+
+### Removed
+- Deleted the legacy, non-functional `subtitles/create_subtitles_OLD.py`
+  script; it collided with the new `subtitles.py` domain module and its
+  functionality is now implemented properly by the Alignment Engine.
+
 ## [0.1.1] - 2026-07-06
 
 ### Changed

@@ -8,11 +8,14 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
+from media_production_framework.alignment import AlignmentError
 from media_production_framework.configuration import ConfigurationError
 from media_production_framework.events import ApplicationStartedEvent, PipelineStageCompletedEvent
 from media_production_framework.log_config import configure_logging
+from media_production_framework.metadata import MetadataError
 from media_production_framework.pipeline import PipelineContext, build_core_pipeline
 from media_production_framework.projects import ProjectValidationError
+from media_production_framework.subtitle_validation import SubtitleValidationError
 
 LOG_LEVEL_CHOICES = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
@@ -82,6 +85,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.exit(2, f"Configuration failed: {exc}\n")
     except ProjectValidationError as exc:
         parser.exit(2, f"Project validation failed: {exc}\n")
+    except MetadataError as exc:
+        parser.exit(2, f"Metadata parsing failed: {exc}\n")
+    except AlignmentError as exc:
+        parser.exit(2, f"Subtitle alignment failed: {exc}\n")
+    except SubtitleValidationError as exc:
+        parser.exit(2, f"Subtitle validation failed: {exc}\n")
 
     stage_count = sum(
         1

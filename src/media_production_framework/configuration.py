@@ -32,6 +32,28 @@ class OutputConfiguration:
     video: Path | None = None
 
 
+DEFAULT_SUBTITLE_PROVIDER = "heuristic"
+DEFAULT_SUBTITLE_MAX_LINE_LENGTH = 42
+
+
+@dataclass(frozen=True)
+class SubtitleConfiguration:
+    """Subtitle generation settings (FR-014 - FR-018, capability CAP-002/CAP-003).
+
+    ``provider`` and ``model`` identify the alignment backend; interpreting
+    them belongs to the Alignment Engine rather than this configuration
+    object, which only carries the validated values.
+    """
+
+    enabled: bool = False
+    provider: str = DEFAULT_SUBTITLE_PROVIDER
+    model: str | None = None
+    language: str | None = None
+    file: Path | None = None
+    max_line_length: int = DEFAULT_SUBTITLE_MAX_LINE_LENGTH
+    audio_duration_seconds: float | None = None
+
+
 @dataclass(frozen=True)
 class ProjectConfiguration:
     """Normalized project configuration loaded from YAML."""
@@ -39,6 +61,7 @@ class ProjectConfiguration:
     project_root: Path
     input: InputConfiguration = field(default_factory=InputConfiguration)
     output: OutputConfiguration = field(default_factory=OutputConfiguration)
+    subtitles: SubtitleConfiguration = field(default_factory=SubtitleConfiguration)
     raw: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -66,6 +89,7 @@ class ConfigurationLoader:
         project_root = resolved_path.parent
         input_data = self._mapping_section(loaded_data, "input")
         output_data = self._mapping_section(loaded_data, "output")
+        subtitles_data = self._mapping_section(loaded_data, "subtitles")
 
         return ProjectConfiguration(
             project_root=project_root,
@@ -77,8 +101,56 @@ class ConfigurationLoader:
             output=OutputConfiguration(
                 video=self._optional_path(output_data, "video", project_root),
             ),
+            subtitles=self._subtitle_configuration(subtitles_data, project_root),
             raw=loaded_data,
         )
+
+    @classmethod
+    def _subtitle_configuration(
+        cls,
+        data: Mapping[str, Any],
+        project_root: Path,
+    ) -> SubtitleConfiguration:
+        enabled = data.get("enabled", False)
+        if not isinstance(enabled, bool):
+            raise ConfigurationError("Configuration value 'subtitles.enabled' must be a boolean.")
+
+        provider = data.get("provider", DEFAULT_SUBTITLE_PROVIDER)
+        if not isinstance(provider, str) or not provider:
+            raise ConfigurationError("Configuration value 'subtitles.provider' must be a string.")
+
+        model = cls._optional_string(data, "model")
+        language = cls._optional_string(data, "language")
+        max_line_length = data.get("max_line_length", DEFAULT_SUBTITLE_MAX_LINE_LENGTH)
+        if not isinstance(max_line_length, int) or isinstance(max_line_length, bool):
+            raise ConfigurationError(
+                "Configuration value 'subtitles.max_line_length' must be an integer."
+            )
+
+        duration = data.get("audio_duration_seconds")
+        if duration is not None and not isinstance(duration, (int, float)):
+            raise ConfigurationError(
+                "Configuration value 'subtitles.audio_duration_seconds' must be a number."
+            )
+
+        return SubtitleConfiguration(
+            enabled=enabled,
+            provider=provider,
+            model=model,
+            language=language,
+            file=cls._optional_path(data, "file", project_root),
+            max_line_length=max_line_length,
+            audio_duration_seconds=float(duration) if duration is not None else None,
+        )
+
+    @staticmethod
+    def _optional_string(data: Mapping[str, Any], key: str) -> str | None:
+        value = data.get(key)
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str):
+            raise ConfigurationError(f"Configuration value '{key}' must be a string.")
+        return value
 
     @staticmethod
     def empty(project_root: Path) -> ProjectConfiguration:
