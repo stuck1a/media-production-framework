@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Milestone M3 Part 2 (Layout Engine): `layout.py` deterministically computes,
+  for each subtitle segment, pixel-measured word-preserving wrapped lines, an
+  automatically scaled font size (binary search over the configured
+  `[min_size, max_size]` range, governed by the hardest-to-fit segment per
+  FR-039) and the text block's bounding box from `vertical`/`horizontal`/
+  container padding. Measurement is delegated to a `TextMeasurer` protocol
+  (`FakeTextMeasurer` for deterministic tests, `PillowTextMeasurer` for real
+  usage via the lazily-imported `render` extra), so layout stays a pure,
+  offline-testable function (no rasterization or I/O).
 - Milestone M3 Part 1 (Rendering foundation): `rendering` and `ffmpeg`
   configuration sections (`configuration.py`) with per-key validation for
   video format, background source, text/font/container layout and karaoke
