@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Milestone M3 Part 3 (Text Renderer): `text_renderer.py` rasterizes each
+  `SegmentLayout` into a transparent RGBA overlay image via Pillow, honouring
+  colour, bold/italic font selection (`FontFileSet`), outline (stroke) and
+  drop shadow (FR-036, FR-041, FR-047). Overlays are keyed by segment index
+  for the future compositor (Part 4). Effects are drawn as small, additive
+  steps so new ones can be added without touching existing code (FR-048).
+  `DefaultFontSource` uses Pillow's own bundled scalable font, so tests
+  rasterize deterministically offline with no bundled binary font asset and
+  no system-font dependency.
+- Added `Pillow` to the `dev` optional-dependency group (already available
+  standalone as the `render` extra) so the full test suite runs without
+  extra setup.
 - Milestone M3 Part 2 (Layout Engine): `layout.py` deterministically computes,
   for each subtitle segment, pixel-measured word-preserving wrapped lines, an
   automatically scaled font size (binary search over the configured

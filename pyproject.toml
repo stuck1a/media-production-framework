@@ -46,6 +46,7 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    "Pillow",
 ]
 render = [
     "Pillow",

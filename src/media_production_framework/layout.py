@@ -87,7 +87,7 @@ class PillowTextMeasurer:
             self._font_cache[cache_key] = loaded
 
         left, top, right, bottom = loaded.getbbox(text or " ")
-        return (right - left, bottom - top)
+        return (int(right - left), int(bottom - top))
 
 
 @dataclass(frozen=True)
