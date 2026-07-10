@@ -412,6 +412,16 @@ class RenderingStage:
         audio_path = assets.audio.path if assets.audio is not None else None
         assert config.output.video is not None  # guaranteed by the caller's skip checks
 
+        duration = self._resolve_duration(config, subtitle_document, audio_path)
+        if duration is None and audio_path is not None:
+            context.logger.warning(
+                "Could not determine the audio duration for %s; the render will "
+                "fall back to ffmpeg '-shortest', which is unreliable for large "
+                "subtitle filtergraphs. Install ffprobe (part of FFmpeg) or set "
+                "'subtitles.audio_duration_seconds' to render with an explicit length.",
+                audio_path,
+            )
+
         job = RenderJob(
             output_path=config.output.video,
             settings=RenderSettings.from_config(render_config, config.ffmpeg),
@@ -421,7 +431,7 @@ class RenderingStage:
             audio_path=audio_path,
             cover_path=config.input.cover,
             metadata=self._resolve_metadata(subtitle_document, assets),
-            duration=self._resolve_duration(config, subtitle_document, audio_path),
+            duration=duration,
             preview=context.preview,
         )
         if context.preview:

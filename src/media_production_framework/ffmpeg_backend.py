@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import threading
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -446,14 +447,17 @@ class FfmpegRenderBackend:
         self._logger.info("Running ffmpeg with %d arguments.", len(command))
         parser = FfmpegProgressParser(duration)
 
-        # Progress is written to stdout (``-progress pipe:1``); ffmpeg's logs go
-        # to stderr. Merge them into one stream and drain it in a single loop so
-        # a full stderr pipe can never deadlock the process.
+        # Keep the two streams separate: ffmpeg writes machine-readable progress
+        # to stdout (``-progress pipe:1``) and its human-readable log -- crucially
+        # including the *actual* error on failure -- to stderr. A background
+        # thread drains stderr into a bounded buffer so the progress flood on
+        # stdout can never evict the error message, while still avoiding a
+        # deadlock from a full stderr pipe.
         try:
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
                 text=True,
                 bufsize=1,
@@ -461,20 +465,56 @@ class FfmpegRenderBackend:
         except OSError as exc:
             raise RenderingError(f"Failed to start ffmpeg: {exc}") from exc
 
+        stderr_tail: deque[str] = deque(maxlen=100)
+
+        def drain_stderr(stream: Any) -> None:
+            for line in stream:
+                stripped = line.strip()
+                if stripped:
+                    stderr_tail.append(stripped)
+
+        assert process.stderr is not None  # noqa: S101 - guaranteed by stderr=PIPE
+        stderr_thread = threading.Thread(
+            target=drain_stderr, args=(process.stderr,), daemon=True
+        )
+        stderr_thread.start()
+
         stdout = process.stdout
         assert stdout is not None  # noqa: S101 - guaranteed by stdout=PIPE
-        recent_lines: deque[str] = deque(maxlen=50)
         for line in stdout:
-            stripped = line.strip()
-            recent_lines.append(stripped)
-            progress = parser.feed(stripped)
+            progress = parser.feed(line.strip())
             if progress is not None and self._on_progress is not None:
                 self._on_progress(progress)
 
         return_code = process.wait()
+        stderr_thread.join(timeout=5)
         if return_code != 0:
-            tail = " | ".join(entry for entry in recent_lines if entry)[-500:]
+            tail = self._error_tail(stderr_tail)
             raise RenderingError(f"ffmpeg failed with exit code {return_code}: {tail}")
+
+    @staticmethod
+    def _error_tail(stderr_lines: deque[str], limit: int = 600) -> str:
+        """Summarize ffmpeg's stderr for an error, favouring the real cause.
+
+        ffmpeg prints the decisive line (e.g. "Could not open encoder before
+        EOF", "Invalid argument") near the end of stderr, so the most recent
+        lines are the informative ones. Lines that look like an actual error are
+        surfaced first, then the raw tail fills the remaining budget.
+        """
+
+        if not stderr_lines:
+            return "no stderr output captured."
+
+        keywords = ("error", "invalid", "could not", "failed", "unable", "no such", "not found")
+        highlights = [line for line in stderr_lines if any(k in line.lower() for k in keywords)]
+
+        ordered: list[str] = []
+        for line in [*highlights[-3:], *reversed(stderr_lines)]:
+            if line not in ordered:
+                ordered.append(line)
+
+        summary = " | ".join(ordered)
+        return summary[:limit]
 
 
 def _base_plan(job: RenderJob, backend_name: str) -> RenderPlan:
