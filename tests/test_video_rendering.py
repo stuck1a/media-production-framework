@@ -36,6 +36,8 @@ def load_config(tmp_path: Path, body: str) -> ConfigurationLoader:
 
 FULL_RENDERING = """
 rendering:
+  enabled: false
+  backend: ffmpeg
   video:
     resolution: 1280x720
     fps: 25
@@ -50,7 +52,7 @@ rendering:
       padding_bottom: 6%
     font:
       name: Arial
-      mode: auto
+      auto_mode: true
       size: 60
       max_lines: 2
       min_size: 30
@@ -80,6 +82,9 @@ def test_rendering_configuration_parses_full_section(tmp_path: Path) -> None:
     assert config.rendering is not None
     render = config.rendering
 
+    assert render.enabled is False
+    assert render.backend == "ffmpeg"
+
     assert render.video.resolution == (1280, 720)
     assert render.video.width == 1280
     assert render.video.height == 720
@@ -96,7 +101,7 @@ def test_rendering_configuration_parses_full_section(tmp_path: Path) -> None:
     assert render.text.container.padding_bottom == pytest.approx(0.06)
 
     assert render.text.font.name == "Arial"
-    assert render.text.font.mode == "auto"
+    assert render.text.font.auto_mode is True
     assert render.text.font.size == 60
     assert render.text.font.max_lines == 2
     assert render.text.font.min_size == 30
@@ -131,8 +136,10 @@ def test_default_rendering_configuration_is_valid() -> None:
 
     assert render.video.resolution == (1920, 1080)
     assert render.background.type == "color"
-    assert render.text.font.mode == "auto"
+    assert render.text.font.auto_mode is True
     assert render.karaoke.enabled is False
+    assert render.enabled is True
+    assert render.backend == "auto"
 
 
 def test_image_background_resolves_source_path(tmp_path: Path) -> None:
@@ -164,6 +171,8 @@ rendering:
         ("rendering:\n  video:\n    fps: 0\n", "rendering.video.fps"),
         ("rendering:\n  video:\n    fps: true\n", "rendering.video.fps"),
         ("rendering:\n  video:\n    bitrate: ''\n", "rendering.video.bitrate"),
+        ("rendering:\n  backend: potato\n", "rendering.backend"),
+        ("rendering:\n  enabled: maybe\n", "rendering.enabled"),
         ("rendering:\n  background:\n    type: hologram\n", "rendering.background.type"),
         ("rendering:\n  background:\n    type: image\n", "rendering.background.source"),
         ("rendering:\n  background:\n    type: color\n    source: red\n", "hex colour"),
@@ -176,7 +185,10 @@ rendering:
             "      padding_bottom: 60%\n",
             "less than 100%",
         ),
-        ("rendering:\n  text:\n    font:\n      mode: elastic\n", "rendering.text.font.mode"),
+        (
+            "rendering:\n  text:\n    font:\n      auto_mode: maybe\n",
+            "rendering.text.font.auto_mode",
+        ),
         (
             "rendering:\n  text:\n    font:\n      min_size: 90\n      max_size: 40\n",
             "must not exceed",

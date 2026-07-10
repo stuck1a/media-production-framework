@@ -107,6 +107,13 @@ DEFAULT_HORIZONTAL_POSITION = "center"
 KARAOKE_STYLES = ("classic", "sweep", "glow")
 DEFAULT_KARAOKE_STYLE = "classic"
 
+# Rendering toggle and backend selection live in the ``rendering`` section so a
+# project is fully described by its configuration file (no CLI flags required).
+# The names mirror the render backends but are duplicated here to keep the
+# Configuration Engine independent of the Rendering Engine.
+RENDER_BACKEND_CHOICES = ("auto", "ffmpeg", "moviepy", "dry-run")
+DEFAULT_RENDER_BACKEND_NAME = "auto"
+
 FFMPEG_PRESETS = (
     "ultrafast",
     "superfast",
@@ -222,12 +229,19 @@ class KaraokeConfiguration:
 
 @dataclass(frozen=True)
 class RenderConfiguration:
-    """Complete rendering configuration for a project (the ``rendering`` section)."""
+    """Complete rendering configuration for a project (the ``rendering`` section).
+
+    ``enabled`` toggles the whole rendering stage (so the section can stay in
+    place while disabled), and ``backend`` selects the render backend
+    (``auto``/``ffmpeg``/``moviepy``/``dry-run``); both replace former CLI flags.
+    """
 
     video: VideoConfiguration = field(default_factory=VideoConfiguration)
     background: BackgroundConfiguration = field(default_factory=BackgroundConfiguration)
     text: TextConfiguration = field(default_factory=TextConfiguration)
     karaoke: KaraokeConfiguration = field(default_factory=KaraokeConfiguration)
+    enabled: bool = True
+    backend: str = DEFAULT_RENDER_BACKEND_NAME
 
 
 @dataclass(frozen=True)
@@ -367,6 +381,14 @@ class ConfigurationLoader:
             ),
             text=cls._text_configuration(cls._mapping_section(data, "text")),
             karaoke=cls._karaoke_configuration(cls._mapping_section(data, "karaoke")),
+            enabled=cls._require_bool(data, "enabled", True, "rendering.enabled"),
+            backend=cls._require_enum(
+                data,
+                "backend",
+                RENDER_BACKEND_CHOICES,
+                DEFAULT_RENDER_BACKEND_NAME,
+                "rendering.backend",
+            ),
         )
 
     @classmethod

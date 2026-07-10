@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from media_production_framework.alignment import AlignmentRequest, AlignmentService
 from media_production_framework.audio import AudioError, get_audio_duration
 from media_production_framework.configuration import (
+    ConfigurationError,
     ConfigurationLoader,
     ProjectConfiguration,
     SubtitleConfiguration,
@@ -65,7 +66,6 @@ class PipelineContext:
     strict_validation: bool = True
     render_enabled: bool = True
     preview: bool = False
-    render_backend: str = BACKEND_AUTO
     configuration: ProjectConfiguration | None = None
     project: Project | None = None
     subtitle_document: SubtitleDocument | None = None
@@ -105,7 +105,7 @@ class ProcessingPipeline:
 
 
 class ConfigurationStage:
-    """Load project configuration or create an empty one."""
+    """Load the project configuration from the required config file."""
 
     name = "configuration"
 
@@ -114,10 +114,9 @@ class ConfigurationStage:
 
     def execute(self, context: PipelineContext) -> PipelineContext:
         if context.configuration_path is None:
-            context.configuration = self._loader.empty(context.project_root)
-            context.strict_validation = False
-            context.event_bus.publish(ConfigurationLoadedEvent(path=""))
-            return context
+            raise ConfigurationError(
+                "A configuration file is required. Pass one with '--config <path>'."
+            )
 
         context.configuration = self._loader.load(context.configuration_path)
         context.event_bus.publish(ConfigurationLoadedEvent(path=str(context.configuration_path)))
@@ -360,12 +359,15 @@ class RenderingStage:
         if config is None or config.rendering is None:
             context.logger.debug("No rendering configuration; skipping rendering stage.")
             return context
+        if not config.rendering.enabled:
+            context.logger.info("Rendering is disabled via 'rendering.enabled'; skipping.")
+            return context
         if config.output.video is None:
             context.logger.debug("No output.video configured; skipping rendering stage.")
             return context
 
         job = self._build_job(context, config)
-        backend_name = context.render_backend
+        backend_name = config.rendering.backend
         context.event_bus.publish(
             RenderingStartedEvent(backend=backend_name, preview=job.preview)
         )

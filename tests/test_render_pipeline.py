@@ -13,8 +13,10 @@ from media_production_framework.events import (
 from media_production_framework.ffmpeg_backend import is_ffmpeg_available
 from media_production_framework.main import run_pipeline
 
-RENDERING_BLOCK = """
+RENDERING_BLOCK_TEMPLATE = """
 rendering:
+  enabled: {enabled}
+  backend: {backend}
   video:
     resolution: 320x240
     fps: 10
@@ -40,6 +42,8 @@ def write_render_project(
     output_video: str | None = "out.mp4",
     cover: bool = False,
     rendering: bool = True,
+    backend: str = "dry-run",
+    enabled: bool = True,
 ) -> Path:
     write_wav(tmp_path / "song.wav", 1.0)
     (tmp_path / "lyrics.txt").write_text("Hello world\nGoodbye now\n", encoding="utf-8")
@@ -60,7 +64,10 @@ def write_render_project(
     ]
     body = "\n".join(lines)
     if rendering:
-        body += "\n" + RENDERING_BLOCK.strip() + "\n"
+        block = RENDERING_BLOCK_TEMPLATE.strip().format(
+            enabled=str(enabled).lower(), backend=backend
+        )
+        body += "\n" + block + "\n"
 
     config_path = tmp_path / "project.yaml"
     config_path.write_text(body, encoding="utf-8")
@@ -77,9 +84,7 @@ def events_of(context, event_type):  # type: ignore[no-untyped-def]
 def test_pipeline_renders_with_dry_run_backend(tmp_path: Path) -> None:
     config_path = write_render_project(tmp_path)
 
-    context = run_pipeline(
-        configuration_path=config_path, log_level="CRITICAL", render_backend="dry-run"
-    )
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
 
     result = context.artifacts["render_result"]
     assert result.success is True
@@ -92,9 +97,7 @@ def test_pipeline_renders_with_dry_run_backend(tmp_path: Path) -> None:
 def test_pipeline_render_plan_includes_metadata_and_lyrics(tmp_path: Path) -> None:
     config_path = write_render_project(tmp_path)
 
-    context = run_pipeline(
-        configuration_path=config_path, log_level="CRITICAL", render_backend="dry-run"
-    )
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
 
     plan = context.artifacts["render_plan"]
     # The full multi-line lyrics text is embedded into the render metadata
@@ -108,9 +111,7 @@ def test_pipeline_render_plan_includes_metadata_and_lyrics(tmp_path: Path) -> No
 def test_pipeline_render_plan_includes_cover_when_configured(tmp_path: Path) -> None:
     config_path = write_render_project(tmp_path, cover=True)
 
-    context = run_pipeline(
-        configuration_path=config_path, log_level="CRITICAL", render_backend="dry-run"
-    )
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
 
     plan = context.artifacts["render_plan"]
     assert any(token.startswith("cover=") for token in plan.argv)
@@ -122,9 +123,7 @@ def test_pipeline_render_plan_includes_cover_when_configured(tmp_path: Path) -> 
 def test_pipeline_skips_rendering_without_output_video(tmp_path: Path) -> None:
     config_path = write_render_project(tmp_path, output_video=None)
 
-    context = run_pipeline(
-        configuration_path=config_path, log_level="CRITICAL", render_backend="dry-run"
-    )
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
 
     assert "render_result" not in context.artifacts
     assert not events_of(context, RenderingStartedEvent)
@@ -133,22 +132,15 @@ def test_pipeline_skips_rendering_without_output_video(tmp_path: Path) -> None:
 def test_pipeline_skips_rendering_without_rendering_section(tmp_path: Path) -> None:
     config_path = write_render_project(tmp_path, rendering=False)
 
-    context = run_pipeline(
-        configuration_path=config_path, log_level="CRITICAL", render_backend="dry-run"
-    )
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
 
     assert "render_result" not in context.artifacts
 
 
 def test_pipeline_skips_rendering_when_disabled(tmp_path: Path) -> None:
-    config_path = write_render_project(tmp_path)
+    config_path = write_render_project(tmp_path, enabled=False)
 
-    context = run_pipeline(
-        configuration_path=config_path,
-        log_level="CRITICAL",
-        render_enabled=False,
-        render_backend="dry-run",
-    )
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
 
     assert "render_result" not in context.artifacts
 
@@ -160,10 +152,7 @@ def test_pipeline_preview_downscales_and_publishes_preview_event(tmp_path: Path)
     config_path = write_render_project(tmp_path)
 
     context = run_pipeline(
-        configuration_path=config_path,
-        log_level="CRITICAL",
-        preview=True,
-        render_backend="dry-run",
+        configuration_path=config_path, log_level="CRITICAL", preview=True
     )
 
     result = context.artifacts["render_result"]
@@ -183,11 +172,9 @@ def test_pipeline_preview_downscales_and_publishes_preview_event(tmp_path: Path)
 @pytest.mark.ffmpeg
 @pytest.mark.skipif(not is_ffmpeg_available(), reason="ffmpeg binary is not installed")
 def test_pipeline_generates_real_video_from_config(tmp_path: Path) -> None:
-    config_path = write_render_project(tmp_path)
+    config_path = write_render_project(tmp_path, backend="ffmpeg")
 
-    context = run_pipeline(
-        configuration_path=config_path, log_level="CRITICAL", render_backend="ffmpeg"
-    )
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
 
     output_path = tmp_path / "out.mp4"
     assert output_path.is_file()

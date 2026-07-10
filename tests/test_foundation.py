@@ -126,3 +126,11 @@ def test_cli_executes_core_pipeline(tmp_path: Path, capsys: pytest.CaptureFixtur
 
     assert exit_code == 0
     assert "pipeline completed (6 stages)" in captured.out
+
+
+def test_cli_requires_config() -> None:
+    # Rendering flags moved into the YAML; --config is now mandatory.
+    with pytest.raises(SystemExit) as exc_info:
+        main([])
+
+    assert exc_info.value.code == 2
