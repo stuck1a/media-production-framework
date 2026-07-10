@@ -63,12 +63,17 @@ def test_wrap_text_by_width_collapses_whitespace_and_handles_empty_text() -> Non
 
 
 def build_text_config(
-    *, min_size: int, max_size: int, max_lines: int, mode: str = "auto"
+    *, min_size: int, max_size: int, max_lines: int, auto_mode: bool = True
 ) -> TextConfiguration:
     return TextConfiguration(
         container=ContainerConfiguration(width=0.25, padding_top=0.1, padding_bottom=0.2),
         font=FontConfiguration(
-            name="F", mode=mode, size=42, max_lines=max_lines, min_size=min_size, max_size=max_size
+            name="F",
+            auto_mode=auto_mode,
+            size=42,
+            max_lines=max_lines,
+            min_size=min_size,
+            max_size=max_size,
         ),
     )
 
@@ -119,11 +124,11 @@ def test_auto_font_sizing_clamps_to_min_size_when_nothing_fits() -> None:
 
 
 def test_fixed_font_mode_bypasses_scaling_search() -> None:
-    text_config = build_text_config(min_size=1, max_size=20, max_lines=1, mode="fixed")
+    text_config = build_text_config(min_size=1, max_size=20, max_lines=1, auto_mode=False)
     text_config = TextConfiguration(
         container=text_config.container,
         font=FontConfiguration(
-            name="F", mode="fixed", size=42, max_lines=1, min_size=1, max_size=20
+            name="F", auto_mode=False, size=42, max_lines=1, min_size=1, max_size=20
         ),
     )
     engine = LayoutEngine(SimpleMeasurer())
@@ -167,7 +172,7 @@ def test_box_anchor_for_each_alignment_combination(
     text_config = TextConfiguration(
         container=ContainerConfiguration(width=0.5, padding_top=0.1, padding_bottom=0.2),
         font=FontConfiguration(
-            name="F", mode="fixed", size=10, max_lines=3, min_size=1, max_size=20
+            name="F", auto_mode=False, size=10, max_lines=3, min_size=1, max_size=20
         ),
         vertical=vertical,
         horizontal=horizontal,

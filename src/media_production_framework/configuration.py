@@ -91,9 +91,8 @@ DEFAULT_CONTAINER_WIDTH = 0.8
 DEFAULT_CONTAINER_PADDING_TOP = 0.05
 DEFAULT_CONTAINER_PADDING_BOTTOM = 0.08
 
-FONT_MODES = ("auto", "fixed")
 DEFAULT_FONT_NAME = "Sans"
-DEFAULT_FONT_MODE = "auto"
+DEFAULT_FONT_AUTO_MODE = True
 DEFAULT_FONT_SIZE = 72
 DEFAULT_FONT_MAX_LINES = 3
 DEFAULT_FONT_MIN_SIZE = 42
@@ -179,13 +178,14 @@ class ContainerConfiguration:
 class FontConfiguration:
     """Font family, sizing bounds and scaling mode (FR-035 - FR-040).
 
-    ``mode`` selects between a fixed ``size`` and automatic sizing that searches
-    the ``[min_size, max_size]`` range; the search itself is implemented by the
-    Layout Engine, not here.
+    ``auto_mode`` toggles automatic sizing: when ``True`` the Layout Engine
+    searches the ``[min_size, max_size]`` range for the largest size that fits;
+    when ``False`` the fixed ``size`` is used verbatim. The search itself is
+    implemented by the Layout Engine, not here.
     """
 
     name: str = DEFAULT_FONT_NAME
-    mode: str = DEFAULT_FONT_MODE
+    auto_mode: bool = DEFAULT_FONT_AUTO_MODE
     size: int = DEFAULT_FONT_SIZE
     max_lines: int = DEFAULT_FONT_MAX_LINES
     min_size: int = DEFAULT_FONT_MIN_SIZE
@@ -488,8 +488,8 @@ class ConfigurationLoader:
             name=cls._require_nonempty_string(
                 data, "name", DEFAULT_FONT_NAME, "rendering.text.font.name"
             ),
-            mode=cls._require_enum(
-                data, "mode", FONT_MODES, DEFAULT_FONT_MODE, "rendering.text.font.mode"
+            auto_mode=cls._require_bool(
+                data, "auto_mode", DEFAULT_FONT_AUTO_MODE, "rendering.text.font.auto_mode"
             ),
             size=cls._require_int(
                 data, "size", DEFAULT_FONT_SIZE, "rendering.text.font.size", minimum=1

@@ -185,7 +185,7 @@ def _search_font_size(
     ``max_lines``, per the Part 2 specification).
     """
 
-    if font_config.mode == "fixed":
+    if not font_config.auto_mode:
         return font_config.size
 
     low, high = font_config.min_size, font_config.max_size
