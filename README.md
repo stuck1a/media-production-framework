@@ -12,11 +12,8 @@ The initial development focuses on generating high-quality lyric and karaoke vid
 
 ## Features
 
-### Planned
-
 * Forced subtitle alignment
 * Subtitle export
-* Karaoke generation
 * Lyric video rendering
 * Configurable rendering pipeline
 * Background image and video support
@@ -24,20 +21,43 @@ The initial development focuses on generating high-quality lyric and karaoke vid
 * AI provider integration
 * Plugin architecture
 * Command-line interface
-* Graphical user interface
+
+### Planned
+
+* Karaoke generation (Milestone M4)
+* Graphical user interface (Milestone M7)
 
 ## Requirements
 
-* Python 3.14 or newer
-* FFmpeg (required for rendering)
+* Python 3.14 (recommended, as tuned for it) or newer
+
+Basically optional, but to get way better results in less time
+* For rendering: fFmpeg or moviepy
+* For lyrics alignment: whisper or faster-whisper
 
 ## Installation
 
-```bash
+### Windows
+
+To get the minimalistic CLI-only setup without any pre-insatlled plugins, execute
+
+```bat
 git clone <repository-url>
 cd media-production-framework
+```
 
-pip install -e ".[dev]"
+
+To support full functionality, execute following afterwards as well
+
+```bat
+.venv/Scripts/python.exe -m pip install --upgrade pip -q && .venv/Scripts/python.exe -m pip install -e ".[render,moviepy,whisper,faster-whisper]"
+```
+
+
+For development purposes, it's higly recommended to install all dev requirements into the virtual environment as well
+
+```bash
+.venv/Scripts/python.exe -m pip install --upgrade pip -q && .venv/Scripts/python.exe -m pip install -e ".[dev]"
 ```
 
 ## Documentation
@@ -48,28 +68,42 @@ Important documents include:
 
 * `docs/implementation-plan.md`
 * `docs/roadmap.md`
-* `docs/developer-guide.md`
 * `docs/coding-standards.md`
 
-## Development
 
-Run the test suite:
+### Where to start reading the documentation (agents)
 
-```bash
-pytest
+Basically, the document `docs/developer-guide.md` can be understood as an entrypoint to dive in.
+
+Its optimised to be a "Start to read here" document for AI agents, but should also work for developers.
+
+## Usage
+
+### Windows
+
+(a) As virtual environment (recommended)
+
+Either activate the env and execute `mpf.exe` like this
+```bat
+.venv/Scripts/activate.bat
+mpf --config templates/yourConfig.yaml
+.venv/Scripts/deactivate.bat
 ```
 
-Run the application:
 
-```bash
-python -m media_production_framework
+Or call `mpf.exe` directly (this will use your local python installation instead)
+```bat
+".venv/Scripts/mpf.exe" --config templates/yourConfig.yaml
 ```
 
-or
 
-```bash
-mpf
+(b) As module
+
+```bat
+py -m pip install -e .
+py -m media_production_framework.main --config templates/yourConfig.yaml
 ```
+
 
 ## License
 
