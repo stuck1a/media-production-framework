@@ -155,10 +155,10 @@ class DryRunRenderBackend:
 class RenderBackendFactory:
     """Create rendering backends by name.
 
-    Only the offline :class:`DryRunRenderBackend` is available at this stage;
-    the FFmpeg and MoviePy backends are registered here in later milestone parts
-    with lazy imports, so this module keeps importing without those tools
-    installed.
+    The offline :class:`DryRunRenderBackend` is always available. The FFmpeg
+    backend is imported lazily so this module keeps importing (and the dry-run
+    path keeps working) even where FFmpeg is not installed. The MoviePy backend
+    and automatic selection are added in a later milestone part.
     """
 
     def create(self, name: str) -> RenderBackend:
@@ -167,6 +167,10 @@ class RenderBackendFactory:
         normalized = name.lower()
         if normalized == BACKEND_DRY_RUN:
             return DryRunRenderBackend()
+        if normalized == BACKEND_FFMPEG:
+            from media_production_framework.ffmpeg_backend import FfmpegRenderBackend
+
+            return FfmpegRenderBackend()
         raise RenderingError(f"Unknown rendering backend: {name}")
 
 

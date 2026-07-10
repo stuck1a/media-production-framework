@@ -311,4 +311,4 @@ def test_render_service_defaults_to_dry_run() -> None:
 
 def test_render_backend_factory_rejects_unknown_backend() -> None:
     with pytest.raises(RenderingError, match="Unknown rendering backend"):
-        RenderBackendFactory().create("ffmpeg")
+        RenderBackendFactory().create("does-not-exist")

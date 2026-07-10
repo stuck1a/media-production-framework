@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Milestone M3 Part 4 (FFmpeg backend): `ffmpeg_backend.py` implements the real
+  `FfmpegRenderBackend`, driving the `ffmpeg` binary as a subprocess to compose
+  and encode a video end-to-end. Builds the command/filtergraph for solid
+  colour (`lavfi color`), static image (`-loop 1`) and looping video
+  (`-stream_loop`) backgrounds, all scaled and padded to the output resolution
+  preserving aspect ratio (FR-049-FR-054); overlays the Part 3 timed text
+  (`enable='between(t,...)'`), maps audio and applies the configured encoder
+  settings (FR-024-FR-028). Looping/trimming to the exact output duration via
+  `-t`/`-shortest` (FR-052/FR-053). Progress is parsed from `-progress` output
+  into `RenderProgress` updates via an injectable callback (FR-032, NFR-011),
+  and success is confirmed only when a non-empty output file exists (NFR-020).
+  The backend is registered in `RenderBackendFactory` with a lazy import and
+  probes the binary, raising `RenderingError` when ffmpeg is absent so a future
+  part can fall back to another backend (FR-031).
+- tests/test_ffmpeg_backend.py (19 tests): pure argv/filtergraph assertions for
+  every background type, audio mapping and overlay-index/enable-expression
+  construction; progress-parser tests against captured `-progress` text; binary
+  probing; and a `@pytest.mark.ffmpeg` integration test (skipped when ffmpeg is
+  absent) that renders a real ~0.5 s clip and asserts a non-empty file.
+- Registered the `ffmpeg` pytest marker in `pyproject.toml`.
 - Milestone M3 Part 3 (Text Renderer): `text_renderer.py` rasterizes each
   `SegmentLayout` into a transparent RGBA overlay image via Pillow, honouring
   colour, bold/italic font selection (`FontFileSet`), outline (stroke) and
