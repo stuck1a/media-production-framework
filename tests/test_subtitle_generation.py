@@ -27,6 +27,7 @@ from media_production_framework.metadata import MetadataError, MetadataParser
 from media_production_framework.pipeline import PipelineContext, SubtitleAlignmentStage
 from media_production_framework.projects import ProjectLoader
 from media_production_framework.subtitle_export import JsonExporter, SrtExporter
+from media_production_framework.subtitle_import import SrtImporter, SrtImportError
 from media_production_framework.subtitle_validation import (
     SubtitleValidationError,
     SubtitleValidator,
@@ -194,6 +195,68 @@ def test_subtitle_builder_raises_on_word_count_mismatch() -> None:
 
     with pytest.raises(AlignmentError):
         SubtitleBuilder().build(parsed, timings)
+
+
+def test_subtitle_builder_error_names_failed_segments() -> None:
+    # PF6: the error identifies which segment (index + content) failed.
+    parsed = LyricsParser().parse("Hello world\nGoodbye now")
+    timings = [
+        WordTiming(word="Hello", start=0.0, end=1.0),
+        WordTiming(word="world", start=1.0, end=2.0),
+    ]
+
+    with pytest.raises(AlignmentError, match=r"segment 2 \('Goodbye now'\)"):
+        SubtitleBuilder().build(parsed, timings, audio_duration=4.0)
+
+
+def test_subtitle_builder_approximates_tail_when_failures_allowed() -> None:
+    # PF7: a tolerated mismatch approximates the unaligned tail segment instead
+    # of aborting, distributing the leftover time up to the audio duration.
+    parsed = LyricsParser().parse("Hello world\nGoodbye now")
+    timings = [
+        WordTiming(word="Hello", start=0.0, end=1.0),
+        WordTiming(word="world", start=1.0, end=2.0),
+    ]
+
+    document = SubtitleBuilder().build(parsed, timings, audio_duration=4.0, max_failures=1)
+
+    assert [segment.text for segment in document.segments] == ["Hello world", "Goodbye now"]
+    approximated = document.segments[1]
+    assert approximated.start == pytest.approx(2.0)
+    assert approximated.end == pytest.approx(4.0)
+    # The approximated segment still carries interpolated word timings and the
+    # document remains structurally valid.
+    assert len(approximated.words) == 2
+    SubtitleValidator().validate(document)
+
+
+def test_subtitle_builder_gives_failed_tail_nominal_duration_without_audio_duration() -> None:
+    # Regression: with an unknown audio duration, a failed *final* segment used
+    # to collapse to start == end (a zero-length cue). It must now get a nominal,
+    # non-zero duration and still validate.
+    parsed = LyricsParser().parse("Hello world\nGoodbye now")
+    timings = [
+        WordTiming(word="Hello", start=0.0, end=1.0),
+        WordTiming(word="world", start=1.0, end=2.0),
+    ]
+
+    document = SubtitleBuilder().build(parsed, timings, max_failures=1)  # no audio_duration
+
+    approximated = document.segments[1]
+    assert approximated.start == pytest.approx(2.0)
+    assert approximated.end > approximated.start
+    SubtitleValidator().validate(document)
+
+
+def test_subtitle_builder_still_raises_when_failures_exceed_allowance() -> None:
+    parsed = LyricsParser().parse("Hello world\nGoodbye now\nThird line here")
+    timings = [
+        WordTiming(word="Hello", start=0.0, end=1.0),
+        WordTiming(word="world", start=1.0, end=2.0),
+    ]
+
+    with pytest.raises(AlignmentError, match="max_alignment_failures_allowed"):
+        SubtitleBuilder().build(parsed, timings, audio_duration=6.0, max_failures=1)
 
 
 def test_alignment_service_end_to_end_with_heuristic_provider() -> None:
@@ -486,8 +549,10 @@ def test_subtitle_alignment_stage_forwards_provider_options_from_configuration(
             provider_name: str,
             model: str | None = None,
             metadata: SongMetadata | None = None,
+            max_failures: int = 0,
         ) -> SubtitleDocument:
             captured["options"] = request.options
+            captured["max_failures"] = max_failures
             timings = HeuristicAlignmentProvider().align(request)
             return SubtitleBuilder().build(
                 request.parsed_lyrics, timings, audio_duration=request.audio_duration
@@ -500,3 +565,165 @@ def test_subtitle_alignment_stage_forwards_provider_options_from_configuration(
     SubtitleAlignmentStage(service=CapturingService()).execute(context)
 
     assert captured["options"] == {"vad": True, "max_word_dur": 4.0}
+
+
+# --- Alignment-failure tolerance (PF7) -----------------------------------------------
+
+
+def test_configuration_loader_parses_max_alignment_failures_allowed(tmp_path: Path) -> None:
+    extra = "  provider: heuristic\n  max_alignment_failures_allowed: 3\n"
+    config_path = write_subtitle_project(tmp_path, subtitles_extra=extra)
+
+    configuration = ConfigurationLoader().load(config_path)
+
+    assert configuration.subtitles.max_alignment_failures_allowed == 3
+
+
+def test_configuration_loader_defaults_max_alignment_failures_to_zero(tmp_path: Path) -> None:
+    config_path = write_subtitle_project(tmp_path, subtitles_extra="  provider: heuristic\n")
+
+    configuration = ConfigurationLoader().load(config_path)
+
+    assert configuration.subtitles.max_alignment_failures_allowed == 0
+
+
+def test_configuration_loader_rejects_negative_max_alignment_failures(tmp_path: Path) -> None:
+    config_path = write_subtitle_project(
+        tmp_path, subtitles_extra="  max_alignment_failures_allowed: -1\n"
+    )
+
+    with pytest.raises(ConfigurationError):
+        ConfigurationLoader().load(config_path)
+
+
+def test_subtitle_alignment_stage_forwards_failure_allowance_from_configuration(
+    tmp_path: Path,
+) -> None:
+    extra = "  provider: heuristic\n  max_alignment_failures_allowed: 2\n"
+    config_path = write_subtitle_project(tmp_path, subtitles_extra=extra)
+    configuration = ConfigurationLoader().load(config_path)
+    project = ProjectLoader().load(configuration)
+
+    captured: dict[str, object] = {}
+
+    class CapturingService:
+        def align(
+            self,
+            request: AlignmentRequest,
+            provider_name: str,
+            model: str | None = None,
+            metadata: SongMetadata | None = None,
+            max_failures: int = 0,
+        ) -> SubtitleDocument:
+            captured["max_failures"] = max_failures
+            timings = HeuristicAlignmentProvider().align(request)
+            return SubtitleBuilder().build(
+                request.parsed_lyrics, timings, audio_duration=request.audio_duration
+            )
+
+    context = PipelineContext(project_root=configuration.project_root)
+    context.configuration = configuration
+    context.project = project
+
+    SubtitleAlignmentStage(service=CapturingService()).execute(context)
+
+    assert captured["max_failures"] == 2
+
+
+# --- SRT import (PF9) -----------------------------------------------------------------
+
+
+def test_srt_importer_round_trips_exported_document(tmp_path: Path) -> None:
+    document = SubtitleDocument(
+        segments=(
+            SubtitleSegment(index=1, text="Hello world", start=0.0, end=1.5),
+            SubtitleSegment(index=2, text="Goodbye now", start=1.5, end=3.0),
+        ),
+    )
+    path = tmp_path / "in.srt"
+    SrtExporter(max_line_length=100).export(document, path)
+
+    imported = SrtImporter().import_file(path, language="en")
+
+    assert [segment.text for segment in imported.segments] == ["Hello world", "Goodbye now"]
+    assert imported.segments[0].start == pytest.approx(0.0)
+    assert imported.segments[0].end == pytest.approx(1.5)
+    assert imported.segments[1].start == pytest.approx(1.5)
+    assert imported.language == "en"
+
+
+def test_srt_importer_rejoins_wrapped_lines() -> None:
+    imported = SrtImporter().parse("1\n00:00:00,000 --> 00:00:02,000\nHello\nworld\n")
+
+    assert imported.segments[0].text == "Hello world"
+
+
+def test_srt_importer_repairs_zero_length_final_cue() -> None:
+    # An SRT exported from a failed alignment can contain a final cue with
+    # start == end; the importer extends it so it stays visible and validates.
+    imported = SrtImporter().parse(
+        "1\n00:00:01,000 --> 00:00:03,000\nFirst line\n\n"
+        "2\n00:00:03,000 --> 00:00:03,000\nSecond line\n"
+    )
+
+    second = imported.segments[1]
+    assert second.start == pytest.approx(3.0)
+    assert second.end > second.start
+    SubtitleValidator().validate(imported)
+
+
+def test_srt_importer_rejects_empty_source() -> None:
+    with pytest.raises(SrtImportError):
+        SrtImporter().parse("   \n\n")
+
+
+def test_srt_importer_rejects_cue_without_timing() -> None:
+    with pytest.raises(SrtImportError):
+        SrtImporter().parse("1\nHello world\n")
+
+
+def test_configuration_loader_parses_subtitle_source(tmp_path: Path) -> None:
+    config_path = write_subtitle_project(tmp_path, subtitles_extra="  source: existing.srt\n")
+
+    configuration = ConfigurationLoader().load(config_path)
+
+    assert configuration.subtitles.source == (tmp_path / "existing.srt").resolve()
+
+
+def test_project_loader_allows_missing_lyrics_when_srt_source_is_set(tmp_path: Path) -> None:
+    audio_path = tmp_path / "song.wav"
+    write_wav(audio_path, duration_seconds=2.0)
+    (tmp_path / "subs.srt").write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nHi there\n", encoding="utf-8"
+    )
+    config_path = tmp_path / "project.yaml"
+    config_path.write_text(
+        "input:\n  audio: song.wav\n"
+        "subtitles:\n  enabled: true\n  source: subs.srt\n  file: out.srt\n",
+        encoding="utf-8",
+    )
+    configuration = ConfigurationLoader().load(config_path)
+
+    project = ProjectLoader().load(configuration)  # must not raise
+
+    assert project.assets.lyrics is None
+
+
+def test_pipeline_imports_existing_srt_and_skips_alignment(tmp_path: Path) -> None:
+    (tmp_path / "existing.srt").write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nHello world\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\nGoodbye now\n",
+        encoding="utf-8",
+    )
+    config_path = write_subtitle_project(tmp_path, subtitles_extra="  source: existing.srt\n")
+
+    context = run_pipeline(configuration_path=config_path, log_level="CRITICAL")
+
+    assert context.subtitle_document is not None
+    assert [segment.text for segment in context.subtitle_document.segments] == [
+        "Hello world",
+        "Goodbye now",
+    ]
+    # The imported timings are exported verbatim; alignment never ran.
+    srt_output = (tmp_path / "output.srt").read_text(encoding="utf-8")
+    assert "00:00:00,000 --> 00:00:01,000" in srt_output

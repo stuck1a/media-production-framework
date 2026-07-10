@@ -36,7 +36,16 @@ class ProjectValidator:
 
         if strict:
             self._require_existing_file(configuration.input.audio, "input.audio", errors)
-            self._require_existing_file(configuration.input.lyrics, "input.lyrics", errors)
+            # PF9: lyrics are only needed for forced alignment. When an existing
+            # SRT source is supplied, alignment is skipped, so lyrics become
+            # optional.
+            lyrics_optional = configuration.subtitles.source is not None
+            self._require_existing_file(
+                configuration.input.lyrics,
+                "input.lyrics",
+                errors,
+                optional=lyrics_optional,
+            )
             self._require_existing_file(
                 configuration.input.metadata,
                 "input.metadata",

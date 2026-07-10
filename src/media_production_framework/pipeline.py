@@ -38,18 +38,22 @@ from media_production_framework.metadata import MetadataParser
 from media_production_framework.projects import ProjectLoader
 from media_production_framework.providers import ProviderRegistry
 from media_production_framework.render_backends import (
-    BACKEND_AUTO,
     RenderService,
     render_backend_descriptors,
 )
 from media_production_framework.rendering import RenderJob, RenderProgress, RenderSettings
 from media_production_framework.subtitle_export import JsonExporter, SrtExporter
+from media_production_framework.subtitle_import import SrtImporter
 from media_production_framework.subtitle_validation import SubtitleValidator
 from media_production_framework.subtitles import SubtitleDocument
 
 PREVIEW_MAX_WIDTH = 640
 PREVIEW_PRESET = "ultrafast"
 PREVIEW_CRF = 30
+
+# Provider label published on alignment events when subtitles are imported from
+# an existing SRT file instead of being aligned (PF9).
+SUBTITLE_IMPORT_LABEL = "srt-import"
 
 
 @dataclass
@@ -178,10 +182,12 @@ class SubtitleAlignmentStage:
         service: AlignmentService | None = None,
         validator: SubtitleValidator | None = None,
         metadata_parser: MetadataParser | None = None,
+        importer: SrtImporter | None = None,
     ) -> None:
         self._service = service or AlignmentService()
         self._validator = validator or SubtitleValidator()
         self._metadata_parser = metadata_parser or MetadataParser()
+        self._importer = importer or SrtImporter()
 
     def execute(self, context: PipelineContext) -> PipelineContext:
         if context.project is None:
@@ -194,6 +200,10 @@ class SubtitleAlignmentStage:
             context.logger.debug("Subtitle generation disabled; skipping alignment.")
             return context
 
+        # PF9: an existing SRT file bypasses alignment entirely.
+        if subtitle_config.source is not None:
+            return self._import_subtitles(context, subtitle_config, assets)
+
         if assets.audio is None or assets.lyrics is None:
             context.logger.debug(
                 "Subtitle alignment requires both audio and lyrics assets; skipping."
@@ -204,11 +214,7 @@ class SubtitleAlignmentStage:
 
         parsed_lyrics = LyricsParser().parse_document(assets.lyrics)
         duration = self._resolve_audio_duration(assets.audio.path, subtitle_config)
-        song_metadata = (
-            self._metadata_parser.parse_file(assets.metadata.path)
-            if assets.metadata is not None
-            else None
-        )
+        song_metadata = self._resolve_song_metadata(assets)
 
         request = AlignmentRequest(
             audio_path=assets.audio.path,
@@ -223,6 +229,7 @@ class SubtitleAlignmentStage:
             provider_name=subtitle_config.provider,
             model=subtitle_config.model,
             metadata=song_metadata,
+            max_failures=subtitle_config.max_alignment_failures_allowed,
         )
         self._validator.validate(document)
 
@@ -234,6 +241,44 @@ class SubtitleAlignmentStage:
             )
         )
         return context
+
+    def _import_subtitles(
+        self,
+        context: PipelineContext,
+        subtitle_config: SubtitleConfiguration,
+        assets: ProjectAssets,
+    ) -> PipelineContext:
+        """Import subtitles from an existing SRT file instead of aligning (PF9)."""
+
+        source = subtitle_config.source
+        assert source is not None  # guaranteed by the caller
+        context.event_bus.publish(AlignmentStartedEvent(provider=SUBTITLE_IMPORT_LABEL))
+
+        document = self._importer.import_file(
+            source,
+            language=subtitle_config.language,
+            metadata=self._resolve_song_metadata(assets),
+        )
+        self._validator.validate(document)
+
+        context.subtitle_document = document
+        context.logger.info(
+            "Imported %d subtitle segment(s) from %s; alignment skipped.",
+            len(document.segments),
+            source,
+        )
+        context.event_bus.publish(
+            AlignmentCompletedEvent(
+                provider=SUBTITLE_IMPORT_LABEL,
+                segment_count=len(document.segments),
+            )
+        )
+        return context
+
+    def _resolve_song_metadata(self, assets: ProjectAssets) -> SongMetadata | None:
+        if assets.metadata is None:
+            return None
+        return self._metadata_parser.parse_file(assets.metadata.path)
 
     @staticmethod
     def _resolve_audio_duration(

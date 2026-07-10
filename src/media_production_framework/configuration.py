@@ -36,6 +36,7 @@ class OutputConfiguration:
 
 DEFAULT_SUBTITLE_PROVIDER = "heuristic"
 DEFAULT_SUBTITLE_MAX_LINE_LENGTH = 42
+DEFAULT_MAX_ALIGNMENT_FAILURES = 0
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,14 @@ class SubtitleConfiguration:
     stable-ts knobs such as ``vad`` or ``word_dur_factor``); this layer does
     not interpret its contents, keeping the Configuration Engine
     provider-agnostic per ADR-0001.
+
+    ``source`` optionally points at an existing SubRip (``.srt``) file. When it
+    is set, alignment is skipped entirely and the subtitle model is imported
+    from that file instead (PF9). ``max_alignment_failures_allowed`` bounds how
+    many lyric lines may fail to align before the pipeline aborts: ``0`` (the
+    default) preserves the strict, fail-fast behaviour, while a higher value
+    lets the Alignment Engine approximate that many mismatched segments and
+    continue at the cost of timing accuracy (PF7).
     """
 
     enabled: bool = False
@@ -56,7 +65,9 @@ class SubtitleConfiguration:
     model: str | None = None
     language: str | None = None
     file: Path | None = None
+    source: Path | None = None
     max_line_length: int = DEFAULT_SUBTITLE_MAX_LINE_LENGTH
+    max_alignment_failures_allowed: int = DEFAULT_MAX_ALIGNMENT_FAILURES
     audio_duration_seconds: float | None = None
     provider_options: Mapping[str, Any] = field(default_factory=dict)
 
@@ -314,6 +325,14 @@ class ConfigurationLoader:
                 "Configuration value 'subtitles.max_line_length' must be an integer."
             )
 
+        max_alignment_failures = cls._require_int(
+            data,
+            "max_alignment_failures_allowed",
+            DEFAULT_MAX_ALIGNMENT_FAILURES,
+            "subtitles.max_alignment_failures_allowed",
+            minimum=0,
+        )
+
         duration = data.get("audio_duration_seconds")
         if duration is not None and not isinstance(duration, (int, float)):
             raise ConfigurationError(
@@ -328,7 +347,9 @@ class ConfigurationLoader:
             model=model,
             language=language,
             file=cls._optional_path(data, "file", project_root),
+            source=cls._optional_path(data, "source", project_root),
             max_line_length=max_line_length,
+            max_alignment_failures_allowed=max_alignment_failures,
             audio_duration_seconds=float(duration) if duration is not None else None,
             provider_options=dict(provider_options),
         )
