@@ -1659,7 +1659,7 @@ Python shall be the primary implementation language.
 
 **TC-002**
 
-The framework shall target Python 3.12 or newer unless explicitly documented otherwise.
+The framework shall target Python 3.14 or newer unless explicitly documented otherwise.
 
 ---
 
