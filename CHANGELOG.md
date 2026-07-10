@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Milestone M3 Part 6 (Pipeline integration, metadata, preview, CLI) — **M3 is
+  now complete**: the framework generates a lyric video end-to-end from a
+  configuration file.
+  - Replaced the rendering placeholder with a real `RenderingStage` that skips
+    gracefully when rendering is disabled, no `rendering` section is present,
+    or `output.video` is unset (mirroring the subtitle stage), builds a
+    `RenderJob` from configuration + subtitle document + assets, selects a
+    backend, renders, stores the `RenderResult`/`RenderPlan` in
+    `context.artifacts`, and publishes the rendering events (including
+    per-frame `RenderingProgressEvent`, FR-005/FR-032).
+  - Metadata embedding (FR-057-FR-059): the FFmpeg backend writes a temporary
+    FFMETADATA1 file (with correct escaping) and embeds it via `-map_metadata`,
+    and embeds cover artwork as an `attached_pic` stream. The full multi-line
+    lyrics text is embedded into the metadata where the container supports it.
+    A new optional `input.cover` configuration key supplies the artwork.
+  - Preview rendering (FR-033/FR-034): a `--preview` fast path reuses the same
+    backend and pipeline at a reduced resolution and writes an `*_preview`
+    output, publishing `PreviewRenderingCompletedEvent`.
+  - CLI: `--render/--no-render`, `--preview` and `--backend` flags;
+    `RenderingError` is handled like the other pipeline errors.
+  - Render backends are registered as `ProviderDescriptor`s in the
+    `ProviderRegistry` for discovery (FR-094), and `RenderService`/
+    `RenderBackendFactory` forward an optional progress callback.
 - Milestone M3 Part 5 (MoviePy backend + automatic selection): `moviepy_backend.py`
   implements a second, interchangeable `MoviePyRenderBackend` (FR-029) covering
   the same ground as the FFmpeg backend — colour/image/looping-video

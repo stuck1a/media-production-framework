@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -17,7 +17,7 @@ from media_production_framework.configuration import (
     ProjectConfiguration,
     SubtitleConfiguration,
 )
-from media_production_framework.domain import Project
+from media_production_framework.domain import Project, ProjectAssets, SongMetadata
 from media_production_framework.events import (
     AlignmentCompletedEvent,
     AlignmentStartedEvent,
@@ -26,16 +26,30 @@ from media_production_framework.events import (
     PipelineCompletedEvent,
     PipelineStageCompletedEvent,
     PipelineStartedEvent,
+    PreviewRenderingCompletedEvent,
     ProjectLoadedEvent,
+    RenderingCompletedEvent,
+    RenderingProgressEvent,
+    RenderingStartedEvent,
     SubtitleExportCompletedEvent,
 )
 from media_production_framework.lyrics import LyricsParser
 from media_production_framework.metadata import MetadataParser
 from media_production_framework.projects import ProjectLoader
 from media_production_framework.providers import ProviderRegistry
+from media_production_framework.render_backends import (
+    BACKEND_AUTO,
+    RenderService,
+    render_backend_descriptors,
+)
+from media_production_framework.rendering import RenderJob, RenderProgress, RenderSettings
 from media_production_framework.subtitle_export import JsonExporter, SrtExporter
 from media_production_framework.subtitle_validation import SubtitleValidator
 from media_production_framework.subtitles import SubtitleDocument
+
+PREVIEW_MAX_WIDTH = 640
+PREVIEW_PRESET = "ultrafast"
+PREVIEW_CRF = 30
 
 
 @dataclass
@@ -45,6 +59,9 @@ class PipelineContext:
     project_root: Path
     configuration_path: Path | None = None
     strict_validation: bool = True
+    render_enabled: bool = True
+    preview: bool = False
+    render_backend: str = BACKEND_AUTO
     configuration: ProjectConfiguration | None = None
     project: Project | None = None
     subtitle_document: SubtitleDocument | None = None
@@ -124,11 +141,16 @@ class ProjectLoadingStage:
 
 
 class ProviderInitializationStage:
-    """Initialize provider infrastructure for the current run."""
+    """Initialize provider infrastructure for the current run.
+
+    Registers the built-in render backends as provider descriptors so they are
+    discoverable through the :class:`ProviderRegistry` (FR-094).
+    """
 
     name = "provider-initialization"
 
     def execute(self, context: PipelineContext) -> PipelineContext:
+        context.provider_registry.extend(render_backend_descriptors())
         context.artifacts["provider_count"] = len(context.provider_registry.all())
         return context
 
@@ -264,14 +286,157 @@ class SubtitleExportStage:
         return context
 
 
-class RenderingPlaceholderStage:
-    """Placeholder for the future video rendering stage (Milestone M3)."""
+class RenderingStage:
+    """Render the final lyric video from configuration and subtitles (FR-023).
 
-    name = "rendering-placeholder"
+    Like :class:`SubtitleAlignmentStage`, the stage skips gracefully whenever
+    rendering is disabled, no ``rendering`` section is configured, or no
+    ``output.video`` path is set, so it is a no-op for projects that do not use
+    video rendering.
+    """
+
+    name = "rendering"
+
+    def __init__(
+        self,
+        service: RenderService | None = None,
+        metadata_parser: MetadataParser | None = None,
+    ) -> None:
+        self._service = service or RenderService()
+        self._metadata_parser = metadata_parser or MetadataParser()
 
     def execute(self, context: PipelineContext) -> PipelineContext:
-        context.artifacts["rendering_placeholder_completed"] = True
+        config = context.configuration
+
+        if not context.render_enabled:
+            context.logger.debug("Rendering disabled; skipping rendering stage.")
+            return context
+        if config is None or config.rendering is None:
+            context.logger.debug("No rendering configuration; skipping rendering stage.")
+            return context
+        if config.output.video is None:
+            context.logger.debug("No output.video configured; skipping rendering stage.")
+            return context
+
+        job = self._build_job(context, config)
+        backend_name = context.render_backend
+        context.event_bus.publish(
+            RenderingStartedEvent(backend=backend_name, preview=job.preview)
+        )
+
+        def on_progress(progress: RenderProgress) -> None:
+            context.event_bus.publish(
+                RenderingProgressEvent(
+                    fraction=progress.fraction,
+                    completed_seconds=progress.completed_seconds,
+                    total_seconds=progress.total_seconds,
+                )
+            )
+
+        plan = self._service.plan(job, backend_name)
+        result = self._service.render(job, backend_name, on_progress=on_progress)
+
+        context.artifacts["render_result"] = result
+        context.artifacts["render_plan"] = plan
+        context.artifacts["render_backend"] = result.backend
+        context.artifacts["render_output_path"] = str(result.output_path)
+
+        if job.preview:
+            context.event_bus.publish(
+                PreviewRenderingCompletedEvent(
+                    backend=result.backend, output_path=str(result.output_path)
+                )
+            )
+        else:
+            context.event_bus.publish(
+                RenderingCompletedEvent(
+                    backend=result.backend,
+                    output_path=str(result.output_path),
+                    success=result.success,
+                )
+            )
         return context
+
+    def _build_job(self, context: PipelineContext, config: ProjectConfiguration) -> RenderJob:
+        assets = context.project.assets if context.project is not None else ProjectAssets()
+        render_config = config.rendering
+        assert render_config is not None  # guaranteed by the caller's skip checks
+
+        subtitle_document = context.subtitle_document or SubtitleDocument()
+        audio_path = assets.audio.path if assets.audio is not None else None
+        assert config.output.video is not None  # guaranteed by the caller's skip checks
+
+        job = RenderJob(
+            output_path=config.output.video,
+            settings=RenderSettings.from_config(render_config, config.ffmpeg),
+            background=render_config.background,
+            text=render_config.text,
+            subtitle_document=subtitle_document,
+            audio_path=audio_path,
+            cover_path=config.input.cover,
+            metadata=self._resolve_metadata(subtitle_document, assets),
+            duration=self._resolve_duration(config, subtitle_document, audio_path),
+            preview=context.preview,
+        )
+        if context.preview:
+            job = self._apply_preview(job)
+        return job
+
+    def _resolve_metadata(
+        self,
+        subtitle_document: SubtitleDocument,
+        assets: ProjectAssets,
+    ) -> SongMetadata | None:
+        song_metadata = subtitle_document.metadata
+        if song_metadata is None and assets.metadata is not None:
+            song_metadata = self._metadata_parser.parse_file(assets.metadata.path)
+
+        fields: dict[str, Any] = dict(song_metadata.fields) if song_metadata is not None else {}
+        # Embed the full, multi-line lyrics text into the metadata where the
+        # container supports it (FR-059), unless a lyrics field already exists.
+        if "lyrics" not in fields and assets.lyrics is not None:
+            fields["lyrics"] = assets.lyrics.text
+
+        return SongMetadata(fields=fields) if fields else None
+
+    @staticmethod
+    def _resolve_duration(
+        config: ProjectConfiguration,
+        subtitle_document: SubtitleDocument,
+        audio_path: Path | None,
+    ) -> float | None:
+        if subtitle_document.audio_duration is not None:
+            return subtitle_document.audio_duration
+        if config.subtitles.audio_duration_seconds is not None:
+            return config.subtitles.audio_duration_seconds
+        if audio_path is not None:
+            try:
+                return get_audio_duration(audio_path)
+            except AudioError:
+                return None
+        return None
+
+    @staticmethod
+    def _apply_preview(job: RenderJob) -> RenderJob:
+        """Return a fast, low-resolution variant of the job (FR-033/FR-034)."""
+
+        settings = job.settings
+        preview_width = min(settings.width, PREVIEW_MAX_WIDTH)
+        scale = preview_width / settings.width
+        width = _even(round(settings.width * scale))
+        height = _even(round(settings.height * scale))
+        preview_settings = replace(
+            settings, width=width, height=height, preset=PREVIEW_PRESET, crf=PREVIEW_CRF
+        )
+        output = job.output_path
+        preview_output = output.with_name(f"{output.stem}_preview{output.suffix}")
+        return replace(job, settings=preview_settings, output_path=preview_output)
+
+
+def _even(value: int) -> int:
+    """Round down to the nearest even number (H.264 requires even dimensions)."""
+
+    return max(value - (value % 2), 2)
 
 
 def build_core_pipeline() -> ProcessingPipeline:
@@ -283,6 +448,6 @@ def build_core_pipeline() -> ProcessingPipeline:
         ProviderInitializationStage(),
         SubtitleAlignmentStage(),
         SubtitleExportStage(),
-        RenderingPlaceholderStage(),
+        RenderingStage(),
     ]
     return ProcessingPipeline(stages)

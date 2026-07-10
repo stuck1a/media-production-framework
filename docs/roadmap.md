@@ -90,7 +90,7 @@ automated tests covering lyrics parsing, alignment, validation and export.
 ---
 
 # Milestone M3 — Video Rendering
-- Done? [ ]
+- Done? [x]
 
 ## Goals
 
@@ -98,22 +98,29 @@ Generate complete lyric videos.
 
 ### Planned Features
 
-- [ ] Rendering Engine
-- [ ] FFmpeg backend
-- [ ] MoviePy integration
-- [ ] Background colors
-- [ ] Background images
-- [ ] Background videos
-- [ ] Video looping
-- [ ] Automatic scaling
-- [ ] Text rendering
-- [ ] Automatic font scaling
-- [ ] Configurable layouts
-- [ ] Metadata embedding
+- [x] Rendering Engine
+- [x] FFmpeg backend
+- [x] MoviePy integration
+- [x] Background colors
+- [x] Background images
+- [x] Background videos
+- [x] Video looping
+- [x] Automatic scaling
+- [x] Text rendering
+- [x] Automatic font scaling
+- [x] Configurable layouts
+- [x] Metadata embedding
 
 ### Exit Criteria
 
 The framework can generate complete lyric videos from configuration files.
+
+Status: Satisfied by the Rendering Engine (Layout Engine, Text Renderer and
+interchangeable FFmpeg/MoviePy backends behind a deterministic `RenderBackend`
+seam with a dry-run default and automatic backend selection; see ADR-0002),
+the `rendering` pipeline stage, and FFMETADATA/cover-art metadata embedding.
+The `mpf` CLI generates a complete lyric video from a configuration file
+(`--render/--no-render`, `--preview`, `--backend`).
 
 ---
 

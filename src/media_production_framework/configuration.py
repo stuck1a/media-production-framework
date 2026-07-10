@@ -24,6 +24,7 @@ class InputConfiguration:
     audio: Path | None = None
     lyrics: Path | None = None
     metadata: Path | None = None
+    cover: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -275,6 +276,7 @@ class ConfigurationLoader:
                 audio=self._optional_path(input_data, "audio", project_root),
                 lyrics=self._optional_path(input_data, "lyrics", project_root),
                 metadata=self._optional_path(input_data, "metadata", project_root),
+                cover=self._optional_path(input_data, "cover", project_root),
             ),
             output=OutputConfiguration(
                 video=self._optional_path(output_data, "video", project_root),

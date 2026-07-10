@@ -113,6 +113,7 @@ class RenderJob:
     text: TextConfiguration
     subtitle_document: SubtitleDocument = field(default_factory=SubtitleDocument)
     audio_path: Path | None = None
+    cover_path: Path | None = None
     metadata: SongMetadata | None = None
     duration: float | None = None
     preview: bool = False

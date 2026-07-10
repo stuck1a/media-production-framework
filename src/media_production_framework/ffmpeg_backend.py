@@ -26,7 +26,7 @@ import logging
 import shutil
 import subprocess
 from collections import deque
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -52,8 +52,40 @@ from media_production_framework.text_renderer import (
 DEFAULT_FFMPEG_BINARY = "ffmpeg"
 DEFAULT_AUDIO_CODEC = "aac"
 DEFAULT_PIXEL_FORMAT = "yuv420p"
+DEFAULT_COVER_CODEC = "mjpeg"
+
+FFMETADATA_HEADER = ";FFMETADATA1"
+_FFMETADATA_SPECIAL = ("\\", "=", ";", "#")
 
 ProgressCallback = Callable[[RenderProgress], None]
+
+
+def _escape_ffmetadata(value: str) -> str:
+    """Escape a key or value for the FFMETADATA1 text format.
+
+    Special characters (``\\ = ; #`` and newlines) must be backslash-escaped so
+    values containing them -- notably multi-line lyrics (FR-059) -- round-trip
+    intact through the container.
+    """
+
+    escaped: list[str] = []
+    for char in value:
+        if char in _FFMETADATA_SPECIAL:
+            escaped.append("\\" + char)
+        elif char == "\n":
+            escaped.append("\\\n")
+        else:
+            escaped.append(char)
+    return "".join(escaped)
+
+
+def write_ffmetadata(fields: Mapping[str, str], path: Path) -> None:
+    """Write a mapping of metadata fields as an FFMETADATA1 file (FR-057)."""
+
+    lines = [FFMETADATA_HEADER]
+    for key, value in fields.items():
+        lines.append(f"{_escape_ffmetadata(key)}={_escape_ffmetadata(value)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -161,27 +193,53 @@ class FfmpegCommandBuilder:
         audio_path: Path | None = None,
         *,
         ffmpeg_binary: str = DEFAULT_FFMPEG_BINARY,
+        metadata_path: Path | None = None,
+        cover_path: Path | None = None,
     ) -> list[str]:
-        """Return the complete ffmpeg command line for the given plan."""
+        """Return the complete ffmpeg command line for the given plan.
+
+        ``metadata_path`` (an FFMETADATA1 file) and ``cover_path`` (an image)
+        are optional extra inputs used to embed song metadata and cover
+        artwork into the output container (FR-057 - FR-059).
+        """
 
         command: list[str] = [ffmpeg_binary, "-y"]
         command += self._background_input(plan)
+        next_index = 1  # the background is input 0.
 
-        has_audio = audio_path is not None
+        audio_index: int | None = None
         if audio_path is not None:
             command += ["-i", str(audio_path)]
+            audio_index = next_index
+            next_index += 1
 
+        overlay_indices: list[int] = []
         for overlay in overlays:
             command += ["-i", str(overlay.path)]
+            overlay_indices.append(next_index)
+            next_index += 1
 
-        overlay_start_index = 1 + (1 if has_audio else 0)
-        filtergraph, video_label = self._filtergraph(plan, overlays, overlay_start_index)
+        metadata_index: int | None = None
+        if metadata_path is not None:
+            command += ["-i", str(metadata_path)]
+            metadata_index = next_index
+            next_index += 1
+
+        cover_index: int | None = None
+        if cover_path is not None:
+            command += ["-i", str(cover_path)]
+            cover_index = next_index
+            next_index += 1
+
+        filtergraph, video_label = self._filtergraph(plan, overlays, overlay_indices)
         command += ["-filter_complex", filtergraph, "-map", f"[{video_label}]"]
 
-        if has_audio:
-            audio_index = 1
-            command += ["-map", f"{audio_index}:a", "-c:a", DEFAULT_AUDIO_CODEC]
-            command += ["-ar", str(plan.audio_sample_rate)]
+        if audio_index is not None:
+            command += ["-map", f"{audio_index}:a"]
+        if cover_index is not None:
+            command += ["-map", f"{cover_index}:v"]
+        if metadata_index is not None:
+            command += ["-map_metadata", str(metadata_index)]
 
         command += [
             "-c:v",
@@ -197,8 +255,14 @@ class FfmpegCommandBuilder:
             "-r",
             str(plan.fps),
         ]
+        if audio_index is not None:
+            command += ["-c:a", DEFAULT_AUDIO_CODEC, "-ar", str(plan.audio_sample_rate)]
+        if cover_index is not None:
+            # Encode the cover as a still image stream marked as attached
+            # artwork rather than a played video stream (FR-058).
+            command += ["-c:v:1", DEFAULT_COVER_CODEC, "-disposition:v:1", "attached_pic"]
 
-        command += self._duration_flags(plan.duration, has_audio)
+        command += self._duration_flags(plan.duration, audio_index is not None)
         command += ["-progress", "pipe:1", "-nostats"]
         command += [str(plan.output_path)]
         return command
@@ -234,7 +298,7 @@ class FfmpegCommandBuilder:
     def _filtergraph(
         plan: RenderPlan,
         overlays: Sequence[OverlaySpec],
-        overlay_start_index: int,
+        overlay_indices: Sequence[int],
     ) -> tuple[str, str]:
         # Scale the background into the frame preserving aspect ratio, then pad
         # the remaining area, centring the content (FR-054).
@@ -245,8 +309,9 @@ class FfmpegCommandBuilder:
         filters = [scale_pad]
 
         current_label = "bg"
-        for offset, overlay in enumerate(overlays):
-            input_index = overlay_start_index + offset
+        for offset, (overlay, input_index) in enumerate(
+            zip(overlays, overlay_indices, strict=True)
+        ):
             output_label = f"v{offset}"
             enable = f"between(t,{_format_time(overlay.start)},{_format_time(overlay.end)})"
             filters.append(
@@ -300,11 +365,15 @@ class FfmpegRenderBackend:
             _placement_spec(layout, job.text, Path(f"overlay-{layout.segment_index}.png"))
             for layout in layouts
         ]
+        metadata_path = Path("metadata.ffmeta") if base.metadata else None
+        cover_path = Path(job.cover_path.name) if job.cover_path is not None else None
         argv = self._command_builder.build(
             base,
             specs,
             job.audio_path,
             ffmpeg_binary=self._binary or DEFAULT_FFMPEG_BINARY,
+            metadata_path=metadata_path,
+            cover_path=cover_path,
         )
         return replace(base, argv=tuple(argv))
 
@@ -315,9 +384,19 @@ class FfmpegRenderBackend:
         plan = _base_plan(job, self.name)
 
         with TemporaryDirectory(prefix="mpf-render-") as tmp_dir:
-            overlays = self._rasterize_overlays(job, Path(tmp_dir))
+            tmp_path = Path(tmp_dir)
+            overlays = self._rasterize_overlays(job, tmp_path)
+            metadata_path: Path | None = None
+            if plan.metadata:
+                metadata_path = tmp_path / "metadata.ffmeta"
+                write_ffmetadata(plan.metadata, metadata_path)
             command = self._command_builder.build(
-                plan, overlays, job.audio_path, ffmpeg_binary=binary
+                plan,
+                overlays,
+                job.audio_path,
+                ffmpeg_binary=binary,
+                metadata_path=metadata_path,
+                cover_path=job.cover_path,
             )
             self._run(command, job.duration, job.output_path)
 

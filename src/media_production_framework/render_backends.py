@@ -24,10 +24,12 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from media_production_framework.domain import SongMetadata
+from media_production_framework.providers import ProviderDescriptor
 from media_production_framework.rendering import (
     BackgroundOperation,
     RenderJob,
     RenderPlan,
+    RenderProgress,
     RenderResult,
 )
 
@@ -37,6 +39,8 @@ BACKEND_MOVIEPY = "moviepy"
 BACKEND_AUTO = "auto"
 
 DEFAULT_RENDER_BACKEND = BACKEND_DRY_RUN
+
+ProgressCallback = Callable[[RenderProgress], None]
 
 # FR-030: automatic selection prefers FFmpeg, falling back to MoviePy.
 AUTO_BACKEND_ORDER: tuple[str, ...] = (BACKEND_FFMPEG, BACKEND_MOVIEPY)
@@ -148,6 +152,8 @@ class DryRunRenderBackend:
         ]
         if job.audio_path is not None:
             tokens.append(f"audio={job.audio_path.name}")
+        if job.cover_path is not None:
+            tokens.append(f"cover={job.cover_path.name}")
         if job.duration is not None:
             tokens.append(f"duration={job.duration}")
         for key in sorted(metadata):
@@ -213,23 +219,32 @@ class RenderBackendFactory:
     def __init__(self, availability: Mapping[str, BackendAvailabilityCheck] | None = None) -> None:
         self._availability = availability or default_backend_availability()
 
-    def create(self, name: str) -> RenderBackend:
-        """Return a rendering backend for the given name."""
+    def create(
+        self,
+        name: str,
+        *,
+        on_progress: ProgressCallback | None = None,
+    ) -> RenderBackend:
+        """Return a rendering backend for the given name.
+
+        ``on_progress``, when given, is forwarded to backends that report
+        progress (FFmpeg and MoviePy); the offline dry-run backend ignores it.
+        """
 
         normalized = name.lower()
         if normalized == BACKEND_DRY_RUN:
             return DryRunRenderBackend()
         if normalized == BACKEND_AUTO:
             resolved = resolve_auto_backend(AUTO_BACKEND_ORDER, self._availability)
-            return self.create(resolved)
+            return self.create(resolved, on_progress=on_progress)
         if normalized == BACKEND_FFMPEG:
             from media_production_framework.ffmpeg_backend import FfmpegRenderBackend
 
-            return FfmpegRenderBackend()
+            return FfmpegRenderBackend(on_progress=on_progress)
         if normalized == BACKEND_MOVIEPY:
             from media_production_framework.moviepy_backend import MoviePyRenderBackend
 
-            return MoviePyRenderBackend()
+            return MoviePyRenderBackend(on_progress=on_progress)
         raise RenderingError(f"Unknown rendering backend: {name}")
 
 
@@ -245,13 +260,36 @@ class RenderService:
 
         return self.factory.create(backend_name).plan(job)
 
-    def render(self, job: RenderJob, backend_name: str = DEFAULT_RENDER_BACKEND) -> RenderResult:
+    def render(
+        self,
+        job: RenderJob,
+        backend_name: str = DEFAULT_RENDER_BACKEND,
+        *,
+        on_progress: ProgressCallback | None = None,
+    ) -> RenderResult:
         """Render a job using the named backend and return its result."""
 
-        backend = self.factory.create(backend_name)
+        backend = self.factory.create(backend_name, on_progress=on_progress)
         self.logger.info(
             "Rendering '%s' using backend '%s'.",
             job.output_path.name,
             backend.name,
         )
         return backend.render(job)
+
+
+RENDER_CAPABILITY = "video-rendering"
+
+
+def render_backend_descriptors() -> tuple[ProviderDescriptor, ...]:
+    """Return provider descriptors for the built-in render backends (FR-094).
+
+    Registered in the :class:`ProviderRegistry` so render backends are
+    discoverable alongside other providers.
+    """
+
+    return (
+        ProviderDescriptor(name=BACKEND_DRY_RUN, capabilities=(RENDER_CAPABILITY,)),
+        ProviderDescriptor(name=BACKEND_FFMPEG, capabilities=(RENDER_CAPABILITY,)),
+        ProviderDescriptor(name=BACKEND_MOVIEPY, capabilities=(RENDER_CAPABILITY,)),
+    )

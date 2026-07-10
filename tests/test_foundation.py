@@ -111,10 +111,12 @@ def test_core_pipeline_executes_all_stages(tmp_path: Path) -> None:
         "provider-initialization",
         "subtitle-alignment",
         "subtitle-export",
-        "rendering-placeholder",
+        "rendering",
     ]
     assert context.project is not None
-    assert context.artifacts["rendering_placeholder_completed"] is True
+    # The project configures output.video but no `rendering` section, so the
+    # rendering stage skips gracefully and produces no render result.
+    assert "render_result" not in context.artifacts
 
 
 def test_cli_executes_core_pipeline(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

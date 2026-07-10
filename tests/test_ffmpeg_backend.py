@@ -14,6 +14,7 @@ from media_production_framework.ffmpeg_backend import (
     OverlaySpec,
     is_ffmpeg_available,
     resolve_ffmpeg_binary,
+    write_ffmetadata,
 )
 from media_production_framework.render_backends import RenderBackendFactory, RenderingError
 from media_production_framework.rendering import (
@@ -172,6 +173,69 @@ def test_overlay_indices_account_for_audio_input() -> None:
     # Background is 0, audio is 1, so the overlay is input 2.
     graph = command[command.index("-filter_complex") + 1]
     assert "[bg][2:v]overlay=x=5:y=6" in graph
+
+
+# --- Command builder: metadata + cover (FR-057/FR-058) ------------------------
+
+
+def test_metadata_input_is_mapped() -> None:
+    plan = make_plan(color_bg())
+    command = FfmpegCommandBuilder().build(plan, [], None, metadata_path=Path("meta.ffmeta"))
+
+    # The lavfi background is input 0, so the metadata file is input 1.
+    assert "meta.ffmeta" in command
+    assert command[command.index("-map_metadata") + 1] == "1"
+
+
+def test_cover_is_mapped_as_attached_picture() -> None:
+    plan = make_plan(color_bg())
+    command = FfmpegCommandBuilder().build(plan, [], None, cover_path=Path("cover.png"))
+
+    assert "cover.png" in command
+    assert "1:v" in command  # cover is input 1, mapped as a video stream
+    assert command[command.index("-c:v:1") + 1] == "mjpeg"
+    assert command[command.index("-disposition:v:1") + 1] == "attached_pic"
+
+
+def test_metadata_and_cover_indices_with_audio_and_overlays() -> None:
+    plan = make_plan(color_bg())
+    overlays = [OverlaySpec(path=Path("o1.png"), x=1, y=2, start=0.0, end=1.0)]
+    command = FfmpegCommandBuilder().build(
+        plan,
+        overlays,
+        Path("song.wav"),
+        metadata_path=Path("meta.ffmeta"),
+        cover_path=Path("cover.png"),
+    )
+
+    # Inputs: bg=0, audio=1, overlay=2, metadata=3, cover=4.
+    assert command[command.index("-map_metadata") + 1] == "3"
+    assert "4:v" in command
+    graph = command[command.index("-filter_complex") + 1]
+    assert "[bg][2:v]overlay=x=1:y=2" in graph
+
+
+# --- FFMETADATA writer (FR-057/FR-059) ----------------------------------------
+
+
+def test_write_ffmetadata_starts_with_header_and_writes_fields(tmp_path: Path) -> None:
+    path = tmp_path / "meta.ffmeta"
+    write_ffmetadata({"title": "Song", "artist": "Someone"}, path)
+
+    content = path.read_text(encoding="utf-8")
+    assert content.startswith(";FFMETADATA1\n")
+    assert "title=Song" in content
+    assert "artist=Someone" in content
+
+
+def test_write_ffmetadata_escapes_special_characters(tmp_path: Path) -> None:
+    path = tmp_path / "meta.ffmeta"
+    write_ffmetadata({"lyrics": "line one\nline; two = end"}, path)
+
+    content = path.read_text(encoding="utf-8")
+    # newline, ';' and '=' inside the value must be backslash-escaped so the
+    # multi-line lyrics round-trip through the container (FR-059).
+    assert "line one\\\nline\\; two \\= end" in content
 
 
 # --- Progress parser ----------------------------------------------------------
