@@ -69,6 +69,7 @@ Important documents include:
 * `docs/implementation-plan.md`
 * `docs/roadmap.md`
 * `docs/coding-standards.md`
+* `docs/yaml-reference.md` — full reference for project configuration files (`templates/*.yaml`)
 
 
 ### Where to start reading the documentation (agents)

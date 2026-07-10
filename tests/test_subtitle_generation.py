@@ -11,17 +11,21 @@ from media_production_framework.alignment import (
     AlignmentProviderFactory,
     AlignmentRequest,
     AlignmentService,
+    FasterWhisperAlignmentProvider,
     HeuristicAlignmentProvider,
+    StableWhisperAlignmentProvider,
     SubtitleBuilder,
     WordTiming,
 )
 from media_production_framework.audio import AudioError, get_audio_duration
-from media_production_framework.configuration import ConfigurationLoader
+from media_production_framework.configuration import ConfigurationError, ConfigurationLoader
 from media_production_framework.domain import SongMetadata
 from media_production_framework.events import PipelineStageCompletedEvent
 from media_production_framework.lyrics import LyricsParser, tokenize
 from media_production_framework.main import run_pipeline
 from media_production_framework.metadata import MetadataError, MetadataParser
+from media_production_framework.pipeline import PipelineContext, SubtitleAlignmentStage
+from media_production_framework.projects import ProjectLoader
 from media_production_framework.subtitle_export import JsonExporter, SrtExporter
 from media_production_framework.subtitle_validation import (
     SubtitleValidationError,
@@ -347,3 +351,152 @@ def test_configuration_loader_parses_subtitles_section(tmp_path: Path) -> None:
     assert configuration.subtitles.provider == "heuristic"
     assert configuration.subtitles.max_line_length == 30
     assert configuration.subtitles.file == (tmp_path / "output.srt").resolve()
+
+
+def test_configuration_loader_defaults_provider_options_to_empty_mapping(
+    tmp_path: Path,
+) -> None:
+    config_path = write_subtitle_project(tmp_path, subtitles_extra="  provider: heuristic\n")
+
+    configuration = ConfigurationLoader().load(config_path)
+
+    assert configuration.subtitles.provider_options == {}
+
+
+def test_configuration_loader_parses_subtitles_options_section(tmp_path: Path) -> None:
+    extra = (
+        "  provider: stable-whisper\n"
+        "  options:\n"
+        "    vad: true\n"
+        "    word_dur_factor: 3.0\n"
+        "    nonspeech_skip: 3.0\n"
+    )
+    config_path = write_subtitle_project(tmp_path, subtitles_extra=extra)
+
+    configuration = ConfigurationLoader().load(config_path)
+
+    assert configuration.subtitles.provider_options == {
+        "vad": True,
+        "word_dur_factor": 3.0,
+        "nonspeech_skip": 3.0,
+    }
+
+
+def test_configuration_loader_rejects_non_mapping_subtitles_options(tmp_path: Path) -> None:
+    config_path = write_subtitle_project(tmp_path, subtitles_extra="  options: not-a-mapping\n")
+
+    with pytest.raises(ConfigurationError):
+        ConfigurationLoader().load(config_path)
+
+
+# --- Provider option passthrough -----------------------------------------------------
+
+
+def test_alignment_request_options_default_to_empty_mapping() -> None:
+    parsed = LyricsParser().parse("Hello world")
+    request = AlignmentRequest(
+        audio_path=Path("unused.wav"),
+        parsed_lyrics=parsed,
+        raw_lyrics="Hello world",
+    )
+
+    assert request.options == {}
+
+
+def test_stable_whisper_provider_forwards_options_to_stable_ts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("stable_whisper")
+    captured: dict[str, object] = {}
+
+    class FakeResult:
+        def all_words(self) -> list[object]:
+            return []
+
+    class FakeModel:
+        def align(self, audio_path: str, **kwargs: object) -> FakeResult:
+            captured["audio_path"] = audio_path
+            captured.update(kwargs)
+            return FakeResult()
+
+    monkeypatch.setattr("stable_whisper.load_model", lambda model: FakeModel())
+
+    parsed = LyricsParser().parse("Hello world")
+    request = AlignmentRequest(
+        audio_path=Path("song.mp3"),
+        parsed_lyrics=parsed,
+        raw_lyrics="Hello world",
+        language="de",
+        options={"vad": True, "word_dur_factor": 3.0},
+    )
+
+    StableWhisperAlignmentProvider(model="large-v3").align(request)
+
+    assert captured["vad"] is True
+    assert captured["word_dur_factor"] == 3.0
+    assert captured["language"] == "de"
+
+
+def test_faster_whisper_provider_forwards_options_to_stable_ts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("stable_whisper")
+    captured: dict[str, object] = {}
+
+    class FakeResult:
+        def all_words(self) -> list[object]:
+            return []
+
+    class FakeModel:
+        def align(self, audio_path: str, **kwargs: object) -> FakeResult:
+            captured["audio_path"] = audio_path
+            captured.update(kwargs)
+            return FakeResult()
+
+    monkeypatch.setattr("stable_whisper.load_faster_whisper", lambda model: FakeModel())
+
+    parsed = LyricsParser().parse("Hello world")
+    request = AlignmentRequest(
+        audio_path=Path("song.mp3"),
+        parsed_lyrics=parsed,
+        raw_lyrics="Hello world",
+        language="de",
+        options={"nonspeech_skip": 3.0},
+    )
+
+    FasterWhisperAlignmentProvider(model="large-v3").align(request)
+
+    assert captured["nonspeech_skip"] == 3.0
+
+
+def test_subtitle_alignment_stage_forwards_provider_options_from_configuration(
+    tmp_path: Path,
+) -> None:
+    extra = "  provider: heuristic\n  options:\n    vad: true\n    max_word_dur: 4.0\n"
+    config_path = write_subtitle_project(tmp_path, subtitles_extra=extra)
+    configuration = ConfigurationLoader().load(config_path)
+    project = ProjectLoader().load(configuration)
+
+    captured: dict[str, object] = {}
+
+    class CapturingService:
+        def align(
+            self,
+            request: AlignmentRequest,
+            provider_name: str,
+            model: str | None = None,
+            metadata: SongMetadata | None = None,
+        ) -> SubtitleDocument:
+            captured["options"] = request.options
+            timings = HeuristicAlignmentProvider().align(request)
+            return SubtitleBuilder().build(
+                request.parsed_lyrics, timings, audio_duration=request.audio_duration
+            )
+
+    context = PipelineContext(project_root=configuration.project_root)
+    context.configuration = configuration
+    context.project = project
+
+    SubtitleAlignmentStage(service=CapturingService()).execute(context)
+
+    assert captured["options"] == {"vad": True, "max_word_dur": 4.0}

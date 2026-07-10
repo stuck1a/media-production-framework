@@ -216,6 +216,7 @@ class SubtitleAlignmentStage:
             raw_lyrics=assets.lyrics.text,
             language=subtitle_config.language,
             audio_duration=duration,
+            options=subtitle_config.provider_options,
         )
         document = self._service.align(
             request,

@@ -44,7 +44,11 @@ class SubtitleConfiguration:
 
     ``provider`` and ``model`` identify the alignment backend; interpreting
     them belongs to the Alignment Engine rather than this configuration
-    object, which only carries the validated values.
+    object, which only carries the validated values. ``provider_options`` is
+    an opaque passthrough for provider-specific alignment tuning (e.g.
+    stable-ts knobs such as ``vad`` or ``word_dur_factor``); this layer does
+    not interpret its contents, keeping the Configuration Engine
+    provider-agnostic per ADR-0001.
     """
 
     enabled: bool = False
@@ -54,6 +58,7 @@ class SubtitleConfiguration:
     file: Path | None = None
     max_line_length: int = DEFAULT_SUBTITLE_MAX_LINE_LENGTH
     audio_duration_seconds: float | None = None
+    provider_options: Mapping[str, Any] = field(default_factory=dict)
 
 
 # --- Rendering configuration (Milestone M3, FR-024 - FR-055) ------------------
@@ -315,6 +320,8 @@ class ConfigurationLoader:
                 "Configuration value 'subtitles.audio_duration_seconds' must be a number."
             )
 
+        provider_options = cls._mapping_section(data, "options")
+
         return SubtitleConfiguration(
             enabled=enabled,
             provider=provider,
@@ -323,6 +330,7 @@ class ConfigurationLoader:
             file=cls._optional_path(data, "file", project_root),
             max_line_length=max_line_length,
             audio_duration_seconds=float(duration) if duration is not None else None,
+            provider_options=dict(provider_options),
         )
 
     @classmethod

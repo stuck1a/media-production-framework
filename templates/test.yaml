@@ -1,27 +1,32 @@
 input:
-  audio: 'G:\Media\Musizieren\Rap\Track Workspace\Naturkajal\Stuck - Naturkajal.mp3'
-  lyrics: 'G:\Media\Musizieren\Rap\Track Workspace\Naturkajal\Lyrics - Naturkajal (RAW).txt'
-  metadata: 'G:\Media\Musizieren\Rap\Track Workspace\Naturkajal\metadata.txt'
-  cover: 'G:\Media\Bilder\Me\IMG_0064.JPG'
+  audio: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Stuck - Naturkajal.mp3"
+  lyrics: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Lyrics - Naturkajal (RAW).txt"
+  metadata: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/metadata.txt"
+  cover: G:/Media/Bilder/Me/IMG_0064.JPG
 
 output:
-  video: 'G:\Media\Musizieren\Rap\Track Workspace\Naturkajal\Stuck - Naturkajal (Lyricsvideo).mp4'
+  video: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Stuck - Naturkajal (Lyricsvideo).mp4"
 
 subtitles:
   enabled: true 
   provider: stable-whisper
-  model: 'D:/Programming Workspace/ClaudeWorkspace/whatsapp-transscriber/models/large-v3.pt'
+  model: "D:/Programming Workspace/ClaudeWorkspace/whatsapp-transscriber/models/large-v3.pt"
   language: de
-  file: 'G:\Media\Musizieren\Rap\Track Workspace\Naturkajal\Stuck - Naturkajal.de_DE.srt'
+  file: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Stuck - Naturkajal.de_DE.srt"
+  options:
+    vad: false
+    word_dur_factor: 3.0
+    max_word_dur: 4.0
+    nonspeech_skip: 3.0
 
 rendering:
   video:
     resolution: 1280x720
-    fps: 25
+    fps: 24
     bitrate: 320K
   background:
     type: image
-    source: 'G:\Media\Bilder\Me\IMG_0064.JPG'
+    source: "G:/Media/Bilder/Me/IMG_0064.JPG"
     loop: true
   text:
     container:

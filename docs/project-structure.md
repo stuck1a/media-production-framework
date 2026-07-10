@@ -97,6 +97,8 @@ Examples
 - youtube.yaml
 - karaoke.yaml
 
+See `docs/yaml-reference.md` for the full reference of all configuration keys.
+
 ---
 
 # Examples

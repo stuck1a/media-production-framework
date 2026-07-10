@@ -274,6 +274,9 @@ Potential future extensions include
 - Timeline editing
 - Cloud providers (optional)
 - Additional export targets
+- Possibility to skip the alignment process entirely and supply an already existing SRT file as subtitle input instead
+- Rename `rendering.text.font.mode` to `rendering.text.font.auto_mode` (boolean), since the current enum offers no way to disable auto mode other than removing the key
+- Tolerate lyric/audio alignment mismatches instead of always aborting: a `max_alignment_failures_allowed` subtitle setting (percentage of total segments, or an absolute count) that lets the pipeline continue past `SubtitleBuilder`'s "fewer words than expected" check for the affected segment(s) at the cost of timing quality, falling back to an approximation (e.g. heuristic-style interpolation) for the mismatched segment only. `0` (the default) preserves today's hard-fail behaviour.
 
 Items in this section are intentionally unordered.
 

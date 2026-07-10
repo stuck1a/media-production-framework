@@ -126,6 +126,7 @@ See `docs/testing.md`.
 | `docs/testing.md` | Testing strategy |
 | `docs/project-structure.md` | Repository organization |
 | `docs/release-process.md` | Versioning and releases |
+| `docs/yaml-reference.md` | Project configuration file (YAML) reference |
 | `docs/adr/*` | Architectural decisions |
 
 ---

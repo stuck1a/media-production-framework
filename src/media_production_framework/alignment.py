@@ -20,10 +20,10 @@ Two categories of providers are offered:
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from media_production_framework.domain import SongMetadata
 from media_production_framework.lyrics import ParsedLyrics
@@ -53,13 +53,19 @@ class WordTiming:
 
 @dataclass(frozen=True)
 class AlignmentRequest:
-    """Input required to align lyrics with an audio recording."""
+    """Input required to align lyrics with an audio recording.
+
+    ``options`` is an opaque, provider-specific passthrough (e.g. stable-ts
+    alignment knobs such as ``vad`` or ``word_dur_factor``); providers that do
+    not recognise a given backend simply ignore it.
+    """
 
     audio_path: Path
     parsed_lyrics: ParsedLyrics
     raw_lyrics: str
     language: str | None = None
     audio_duration: float | None = None
+    options: Mapping[str, Any] = field(default_factory=dict)
 
 
 class AlignmentProvider(Protocol):
@@ -110,7 +116,13 @@ class HeuristicAlignmentProvider:
 
 
 class StableWhisperAlignmentProvider:
-    """Forced alignment using an OpenAI Whisper model via ``stable-ts``."""
+    """Forced alignment using an OpenAI Whisper model via ``stable-ts``.
+
+    ``AlignmentRequest.options`` is forwarded verbatim as keyword arguments to
+    ``stable_whisper``'s ``align()`` (e.g. ``vad``, ``word_dur_factor``,
+    ``max_word_dur``, ``nonspeech_skip``); this provider does not interpret or
+    validate them, it only relays them to the underlying library.
+    """
 
     name = PROVIDER_STABLE_WHISPER
 
@@ -135,12 +147,17 @@ class StableWhisperAlignmentProvider:
             str(request.audio_path),
             text=request.raw_lyrics,
             language=request.language,
+            **request.options,
         )
         return _word_timings_from_stable_result(result)
 
 
 class FasterWhisperAlignmentProvider:
-    """Forced alignment using a Faster-Whisper model via ``stable-ts``."""
+    """Forced alignment using a Faster-Whisper model via ``stable-ts``.
+
+    ``AlignmentRequest.options`` is forwarded verbatim as keyword arguments to
+    ``stable_whisper``'s ``align()``, the same as :class:`StableWhisperAlignmentProvider`.
+    """
 
     name = PROVIDER_FASTER_WHISPER
 
@@ -168,6 +185,7 @@ class FasterWhisperAlignmentProvider:
             str(request.audio_path),
             text=request.raw_lyrics,
             language=request.language,
+            **request.options,
         )
         return _word_timings_from_stable_result(result)
 
