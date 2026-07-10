@@ -119,6 +119,30 @@ def default_font_set() -> FontFileSet:
 
 
 @dataclass(frozen=True)
+class FontSourceMeasurer:
+    """A :class:`~media_production_framework.layout.TextMeasurer` that measures
+    with a render backend's own fonts.
+
+    Using the same :class:`FontFileSet` for both the Layout Engine's sizing
+    pass and the actual rasterization keeps line breaks consistent with what
+    is drawn, avoiding overflow from a mismatched metrics source. Shared by
+    every backend that renders real text (FFmpeg, MoviePy).
+    """
+
+    fonts: FontFileSet
+
+    def measure(
+        self, text: str, font: str, size: int, *, bold: bool = False, italic: bool = False
+    ) -> tuple[int, int]:
+        from PIL import Image, ImageDraw
+
+        loaded = self.fonts.resolve(bold=bold, italic=italic).load(size)
+        draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        left, top, right, bottom = draw.textbbox((0, 0), text or " ", font=loaded)
+        return (int(right - left), int(bottom - top))
+
+
+@dataclass(frozen=True)
 class TextOverlay:
     """A rasterized, transparent RGBA overlay for one subtitle segment."""
 

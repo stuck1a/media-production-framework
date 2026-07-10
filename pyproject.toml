@@ -51,6 +51,9 @@ dev = [
 render = [
     "Pillow",
 ]
+moviepy = [
+    "moviepy",
+]
 whisper = [
     "stable-ts",
 ]
@@ -78,6 +81,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "ffmpeg: integration tests that require the ffmpeg binary (skipped if absent)",
+    "moviepy: integration tests that require the moviepy package (skipped if absent)",
 ]
 
 [tool.ruff]
@@ -98,5 +102,5 @@ python_version = "3.14"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["yaml", "stable_whisper", "PIL", "PIL.*"]
+module = ["yaml", "stable_whisper", "PIL", "PIL.*", "moviepy", "moviepy.*", "proglog"]
 ignore_missing_imports = true

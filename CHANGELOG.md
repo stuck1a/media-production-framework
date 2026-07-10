@@ -8,6 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Milestone M3 Part 5 (MoviePy backend + automatic selection): `moviepy_backend.py`
+  implements a second, interchangeable `MoviePyRenderBackend` (FR-029) covering
+  the same ground as the FFmpeg backend — colour/image/looping-video
+  backgrounds scaled and padded to preserve aspect ratio (FR-049-FR-054), Part
+  3's timed text overlays, audio, and the configured encoder settings. Video
+  backgrounds loop and trim to the exact output duration via MoviePy's `Loop`
+  effect (FR-052/FR-053). Progress is bridged from MoviePy's `proglog` progress
+  bars into the same `RenderProgress` callback shape the FFmpeg backend uses
+  (FR-032). `MoviePyCommandBuilder` builds a symbolic, ordered description of
+  the composition (MoviePy has no literal command line) so it stays fully
+  argv-style testable without importing MoviePy. `moviepy` is lazily imported
+  and added as its own optional extra.
+  - `RenderBackendFactory` now supports `"auto"` backend selection (FR-030):
+    `resolve_auto_backend` is a pure policy function (prefers FFmpeg, falls
+    back to MoviePy, raises `RenderingError` if neither is available, FR-031)
+    testable with fake availability checks with no heavy dependency needed.
+    The factory accepts an injectable `availability` mapping for exactly that.
+  - Extracted the shared `FontSourceMeasurer` (bridges the Layout Engine's
+    sizing pass to a backend's own fonts) from `ffmpeg_backend.py` into
+    `text_renderer.py` so both real backends reuse the same font-consistent
+    measurement instead of duplicating it.
+  - tests/test_render_selection.py (9 tests) and tests/test_moviepy_backend.py
+    (11 tests): pure selection-policy and command-token assertions, plus
+    `@pytest.mark.moviepy` integration tests (skipped when moviepy is absent)
+    that render a real clip and verify video-background loop/trim.
+  - Registered the `moviepy` pytest marker and `moviepy` optional extra.
 - Milestone M3 Part 4 (FFmpeg backend): `ffmpeg_backend.py` implements the real
   `FfmpegRenderBackend`, driving the `ffmpeg` binary as a subprocess to compose
   and encode a video end-to-end. Builds the command/filtergraph for solid

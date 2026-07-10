@@ -42,7 +42,12 @@ from media_production_framework.rendering import (
     RenderProgress,
     RenderResult,
 )
-from media_production_framework.text_renderer import FontFileSet, TextRenderer, default_font_set
+from media_production_framework.text_renderer import (
+    FontFileSet,
+    FontSourceMeasurer,
+    TextRenderer,
+    default_font_set,
+)
 
 DEFAULT_FFMPEG_BINARY = "ffmpeg"
 DEFAULT_AUDIO_CODEC = "aac"
@@ -139,28 +144,6 @@ class FfmpegProgressParser:
             completed_seconds=microseconds / 1_000_000,
             total_seconds=self._total_seconds,
         )
-
-
-@dataclass(frozen=True)
-class FontSourceMeasurer:
-    """A :class:`TextMeasurer` that measures with the rasterizer's own fonts.
-
-    Using the same :class:`FontFileSet` for both measurement and rasterization
-    keeps the Layout Engine's line breaks consistent with what is actually
-    drawn, avoiding overflow from a mismatched metrics source.
-    """
-
-    fonts: FontFileSet
-
-    def measure(
-        self, text: str, font: str, size: int, *, bold: bool = False, italic: bool = False
-    ) -> tuple[int, int]:
-        from PIL import Image, ImageDraw
-
-        loaded = self.fonts.resolve(bold=bold, italic=italic).load(size)
-        draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-        left, top, right, bottom = draw.textbbox((0, 0), text or " ", font=loaded)
-        return (int(right - left), int(bottom - top))
 
 
 class FfmpegCommandBuilder:

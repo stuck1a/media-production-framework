@@ -19,6 +19,7 @@ See ADR-0002 for the rationale behind the plan/execute split.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -36,6 +37,11 @@ BACKEND_MOVIEPY = "moviepy"
 BACKEND_AUTO = "auto"
 
 DEFAULT_RENDER_BACKEND = BACKEND_DRY_RUN
+
+# FR-030: automatic selection prefers FFmpeg, falling back to MoviePy.
+AUTO_BACKEND_ORDER: tuple[str, ...] = (BACKEND_FFMPEG, BACKEND_MOVIEPY)
+
+BackendAvailabilityCheck = Callable[[], bool]
 
 
 class RenderingError(RuntimeError):
@@ -152,14 +158,60 @@ class DryRunRenderBackend:
         return tuple(tokens)
 
 
+def resolve_auto_backend(
+    order: Sequence[str],
+    availability: Mapping[str, BackendAvailabilityCheck],
+) -> str:
+    """Return the first available backend name in ``order`` (FR-030/FR-031).
+
+    Pure selection policy, independent of how a backend is instantiated: it
+    only calls the injected availability checks, so it is fully testable with
+    fake checks and needs neither FFmpeg nor MoviePy installed.
+    """
+
+    checked: list[str] = []
+    for name in order:
+        check = availability.get(name)
+        if check is not None and check():
+            return name
+        checked.append(name)
+    raise RenderingError(
+        f"No rendering backend is available (checked: {', '.join(checked)}). "
+        "Install ffmpeg or the 'moviepy' extra, or configure an explicit backend."
+    )
+
+
+def _ffmpeg_available() -> bool:
+    from media_production_framework.ffmpeg_backend import is_ffmpeg_available
+
+    return is_ffmpeg_available()
+
+
+def _moviepy_available() -> bool:
+    from media_production_framework.moviepy_backend import is_moviepy_available
+
+    return is_moviepy_available()
+
+
+def default_backend_availability() -> dict[str, BackendAvailabilityCheck]:
+    """Return the real, lazily-evaluated availability check for each backend."""
+
+    return {BACKEND_FFMPEG: _ffmpeg_available, BACKEND_MOVIEPY: _moviepy_available}
+
+
 class RenderBackendFactory:
     """Create rendering backends by name.
 
     The offline :class:`DryRunRenderBackend` is always available. The FFmpeg
-    backend is imported lazily so this module keeps importing (and the dry-run
-    path keeps working) even where FFmpeg is not installed. The MoviePy backend
-    and automatic selection are added in a later milestone part.
+    and MoviePy backends are imported lazily so this module keeps importing
+    (and the dry-run path keeps working) even where neither is installed.
+    ``"auto"`` resolves to the first available backend in
+    :data:`AUTO_BACKEND_ORDER` using ``availability`` (real system probes by
+    default; tests may inject fakes, see :func:`resolve_auto_backend`).
     """
+
+    def __init__(self, availability: Mapping[str, BackendAvailabilityCheck] | None = None) -> None:
+        self._availability = availability or default_backend_availability()
 
     def create(self, name: str) -> RenderBackend:
         """Return a rendering backend for the given name."""
@@ -167,10 +219,17 @@ class RenderBackendFactory:
         normalized = name.lower()
         if normalized == BACKEND_DRY_RUN:
             return DryRunRenderBackend()
+        if normalized == BACKEND_AUTO:
+            resolved = resolve_auto_backend(AUTO_BACKEND_ORDER, self._availability)
+            return self.create(resolved)
         if normalized == BACKEND_FFMPEG:
             from media_production_framework.ffmpeg_backend import FfmpegRenderBackend
 
             return FfmpegRenderBackend()
+        if normalized == BACKEND_MOVIEPY:
+            from media_production_framework.moviepy_backend import MoviePyRenderBackend
+
+            return MoviePyRenderBackend()
         raise RenderingError(f"Unknown rendering backend: {name}")
 
 
