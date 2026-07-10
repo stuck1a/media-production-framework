@@ -120,7 +120,8 @@ interchangeable FFmpeg/MoviePy backends behind a deterministic `RenderBackend`
 seam with a dry-run default and automatic backend selection; see ADR-0002),
 the `rendering` pipeline stage, and FFMETADATA/cover-art metadata embedding.
 The `mpf` CLI generates a complete lyric video from a configuration file
-(`--render/--no-render`, `--preview`, `--backend`).
+(rendering is toggled and the backend selected via the `rendering` section;
+`--preview` remains a per-invocation CLI switch).
 
 ---
 
@@ -178,7 +179,7 @@ The following features are intentionally postponed until after the first stable 
 ---
 
 ## GUI
-- Done? [ ]
+Done? [ ]
 
 ### Planned Features
 
@@ -193,7 +194,7 @@ The following features are intentionally postponed until after the first stable 
 ---
 
 ## AI-Assisted Content Generation
-- Done? [ ]
+Done? [ ]
 
 ### Planned Features
 
@@ -209,7 +210,7 @@ The following features are intentionally postponed until after the first stable 
 ---
 
 ## Translation
-- Done? [ ]
+Done? [ ]
 
 ### Planned Features
 
@@ -221,7 +222,7 @@ The following features are intentionally postponed until after the first stable 
 ---
 
 ## Rendering Improvements
-- Done? [ ]
+Done? [ ]
 
 ### Planned Features
 
@@ -231,11 +232,13 @@ The following features are intentionally postponed until after the first stable 
 - [ ] Render preview mode
 - [ ] Render caching
 - [ ] Incremental rendering
+- [ ] Synthesize bold when a resolved font has no bold file (`rendering.text.bold: true` currently has no effect for such fonts, since `FontFileSet` does not synthesize missing variants)
+- [ ] Synthesize italic when a resolved font has no italic file (same gap as above, for `rendering.text.italic: true`)
 
 ---
 
 ## Advanced Project Editing
-- Done? [ ]
+Done? [ ]
 
 ### Planned Features
 
@@ -248,7 +251,7 @@ The following features are intentionally postponed until after the first stable 
 ---
 
 ## Plugin Ecosystem
-- Done? [ ]
+Done? [ ]
 
 ### Planned Features
 
@@ -257,6 +260,47 @@ The following features are intentionally postponed until after the first stable 
 - [ ] Plugin discovery
 - [ ] Third-party renderers
 - [ ] Third-party AI providers
+
+---
+
+## Enhance Logging
+Done? [x]
+
+Enhance logging in case of failed alignments: Tell the user which segment/line number(s) failed and also their content
+
+---
+
+## Tolerate alignment mismatches
+Done? [x]
+
+Tolerate lyric/audio alignment mismatches instead of always aborting:
+a `max_alignment_failures_allowed` subtitle setting (implemented as an absolute count of segments) that lets the pipeline
+continue past `SubtitleBuilder`'s "fewer words than expected" check for the affected segment(s) at the cost of timing quality,
+falling back to an approximation (heuristic-style interpolation) for the mismatched segment only.
+`0` (the default) preserves hard-fail behaviour.
+
+---
+
+## Rename font mode setting
+Done? [x]
+
+Rename `rendering.text.font.mode` to `rendering.text.font.auto_mode` (boolean),
+since the current enum offers no way to disable auto mode other than removing the key.
+
+---
+
+## Optional skip alignment process
+Done? [x]
+
+Possibility to skip the alignment process entirely and supply an already existing SRT file as subtitle input instead.
+
+---
+
+## On-the-fly lyrics translation
+Done? [ ]
+
+Additional translation of lyric segments on-the-fly in one or more languages.
+Further allow to generate subtitle files (SRT) for those languages as well.
 
 ---
 
@@ -274,9 +318,6 @@ Potential future extensions include
 - Timeline editing
 - Cloud providers (optional)
 - Additional export targets
-- Possibility to skip the alignment process entirely and supply an already existing SRT file as subtitle input instead
-- Rename `rendering.text.font.mode` to `rendering.text.font.auto_mode` (boolean), since the current enum offers no way to disable auto mode other than removing the key
-- Tolerate lyric/audio alignment mismatches instead of always aborting: a `max_alignment_failures_allowed` subtitle setting (percentage of total segments, or an absolute count) that lets the pipeline continue past `SubtitleBuilder`'s "fewer words than expected" check for the affected segment(s) at the cost of timing quality, falling back to an approximation (e.g. heuristic-style interpolation) for the mismatched segment only. `0` (the default) preserves today's hard-fail behaviour.
 
 Items in this section are intentionally unordered.
 
