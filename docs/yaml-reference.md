@@ -41,12 +41,14 @@ subtitles:
   model: "D:/models/large-v3.pt"       # path to a Whisper model (*.pt); required by stable-whisper/faster-whisper
   language: de                         # ISO-639-1 language code (de, en, fr, es, it, ...)
   file: MySong.de_DE.srt               # output subtitle file (SRT)
+  # source: existing.srt               # optional: import this existing SRT and skip alignment entirely
   max_line_length: 42                  # max characters per subtitle line before wrapping (default: 42)
+  max_alignment_failures_allowed: 0    # how many lyric lines may fail to align before aborting (default: 0 = strict)
   options:                             # opaque passthrough to the alignment provider, ignored by "heuristic"
     vad: true                          # Silero VAD instead of volume-threshold silence detection (better for busy backing tracks)
     word_dur_factor: 3.0               # looser local max-word-duration before re-alignment kicks in (default 2.0)
     max_word_dur: 4.0                  # looser global cap (default 3.0)
-    nonspeech_skip: 3.0                # skip silent gaps >=3s instead of 5s (default 5.0)
+    nonspeech_skip: 3.0                # skip silent gaps >=3s (default 5.0)
 
 rendering:                             # omit the whole section to skip video rendering entirely
   video:
@@ -66,8 +68,8 @@ rendering:                             # omit the whole section to skip video re
                                         # padding_top + padding_bottom must sum to less than 100%
     font:
       name: Montserrat                 # font family name (default: Sans)
-      mode: auto                       # auto | fixed — auto searches [min_size, max_size] to fit max_lines
-      size: 72                         # fixed font size in points; ignored when mode=auto (default: 72)
+      auto_mode: true                  # true = search [min_size, max_size] to fit max_lines; false = use fixed size (default: true)
+      size: 72                         # fixed font size in points; ignored when auto_mode is true (default: 72)
       max_lines: 3                     # max number of text lines before triggering auto-sizing (default: 3)
       min_size: 42                     # lower bound for auto-sizing (default: 42)
       max_size: 84                     # upper bound for auto-sizing (default: 84)
@@ -116,12 +118,20 @@ ffmpeg:
 | `model` | string | — | Path to a Whisper model file (`*.pt`). Required by `stable-whisper`/`faster-whisper`. |
 | `language` | string | — | ISO-639-1 language code (e.g. `de`, `en`, `fr`). |
 | `file` | path | — | Destination subtitle file (SRT). |
+| `source` | path | — | Optional existing SRT file. When set, alignment is skipped entirely and the subtitle model is imported from this file instead. Lyrics become optional in this mode. |
 | `max_line_length` | int | `42` | Maximum characters per subtitle line before wrapping. |
+| `max_alignment_failures_allowed` | int | `0` | Number of lyric lines allowed to fail alignment before the pipeline aborts. `0` fails fast on any mismatch (naming the offending segments). A higher value tolerates that many mismatched segments, approximating their timing (heuristic-style interpolation) instead of aborting — at the cost of timing accuracy. |
 | `options` | mapping | `{}` | Opaque passthrough to the alignment provider. Ignored by `heuristic`; see [Alignment Provider Options](#alignment-provider-options) below. |
 
 ## `rendering`
 
-Omit the entire `rendering` section to skip video rendering (subtitle-only projects).
+Controls video rendering. Either omit the entire `rendering` section or set
+`enabled: false` to skip rendering (subtitle-only projects).
+
+| Key | Type | Default | Description |
+|-----|------|---------|--------------|
+| `enabled` | bool | `true` | Whether to render the output video. Set to `false` to keep the section but skip rendering. |
+| `backend` | enum | `auto` | Render backend: `auto` (picks the first available, preferring ffmpeg) \| `ffmpeg` \| `moviepy` \| `dry-run`. |
 
 ### `rendering.video`
 
@@ -152,9 +162,9 @@ Omit the entire `rendering` section to skip video rendering (subtitle-only proje
 
 | Key | Type | Default | Description |
 |-----|------|---------|--------------|
-| `name` | string | `Sans` | Font family name. |
-| `mode` | enum | `auto` | `auto` \| `fixed`. `auto` searches `[min_size, max_size]` for the largest size that fits within `max_lines`; `fixed` always uses `size`. |
-| `size` | int | `72` | Fixed font size in points. Ignored when `mode: auto`. |
+| `name` | string | `Sans` | Font family name (e.g. `Mistral`, `Arial`) or a path to a `.ttf`/`.otf`/`.ttc` file. Family names are resolved against the operating system's installed fonts (bold/italic variants included). Generic names (`Sans`, `Serif`, `Monospace`) and any unresolved family fall back to a bundled font, which may lack non-Latin glyphs such as umlauts. |
+| `auto_mode` | bool | `true` | When `true`, the Layout Engine searches `[min_size, max_size]` for the largest size that fits within `max_lines`. When `false`, the fixed `size` is used verbatim. |
+| `size` | int | `72` | Fixed font size in points. Ignored when `auto_mode` is `true`. |
 | `max_lines` | int | `3` | Maximum number of text lines before the auto-sizing search kicks in. |
 | `min_size` | int | `42` | Lower bound for auto-sizing. Must not exceed `max_size`. |
 | `max_size` | int | `84` | Upper bound for auto-sizing. |
