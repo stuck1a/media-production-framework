@@ -13,13 +13,18 @@ subtitles:
   model: "D:/Programming Workspace/ClaudeWorkspace/whatsapp-transscriber/models/large-v3.pt"
   language: de
   file: MySong.de_DE.srt
+  #source: MySong.de_DE.srt
+  max_line_length: 42
+  max_alignment_failures_allowed: 1
   options:
-    vad: true
+    vad: false
     word_dur_factor: 3.0
     max_word_dur: 4.0
     nonspeech_skip: 3.0
 
 rendering:
+  enabled: true
+  backend: auto            # auto | ffmpeg | moviepy | dry-run
   video:
     resolution: 1920x1080
     fps: 30
@@ -30,17 +35,17 @@ rendering:
     loop: true
   text:
     container:
-      width: 80%
+      width: 75%
       padding_top: 5%
       padding_bottom: 8%
     font:
-      name: Montserrat
-      mode: auto
+      name: Arial
+      auto_mode: true
       size: 72
       max_lines: 3
       min_size: 42
       max_size: 84
-    color: "#FFFFFF"
+    color: "#FF0000"
     bold: true
     italic: false
     outline: 4

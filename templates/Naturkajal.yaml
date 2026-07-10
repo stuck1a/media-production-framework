@@ -1,5 +1,5 @@
 input:
-  audio: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Stuck - Naturkajal.mp3"
+  audio: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Stuck - Naturkajal.wav"
   lyrics: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Lyrics - Naturkajal (RAW).txt"
   metadata: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/metadata.txt"
   cover: G:/Media/Bilder/Me/IMG_0064.JPG
@@ -13,6 +13,9 @@ subtitles:
   model: "D:/Programming Workspace/ClaudeWorkspace/whatsapp-transscriber/models/large-v3.pt"
   language: de
   file: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Stuck - Naturkajal.de_DE.srt"
+  #source: "G:/Media/Musizieren/Rap/Track Workspace/Naturkajal/Stuck - Naturkajal.de_DE.srt"
+  max_line_length: 42
+  max_alignment_failures_allowed: 1
   options:
     vad: false
     word_dur_factor: 3.0
@@ -20,22 +23,26 @@ subtitles:
     nonspeech_skip: 3.0
 
 rendering:
+  enabled: true
   video:
     resolution: 1280x720
     fps: 24
     bitrate: 320K
+    codec: libx264
   background:
-    type: image
-    source: "G:/Media/Bilder/Me/IMG_0064.JPG"
+    #type: image
+    #source: "G:/Media/Bilder/Me/IMG_0064.JPG"
+    type: video
+    source: "G:/Media/Musizieren/Rap/Track Workspace/Endlich für immer/Workspace/Video/Videoloop.mp4"
     loop: true
   text:
     container:
-      width: 80%
+      width: 70%
       padding_top: 5%
       padding_bottom: 8%
     font:
       name: Mistral
-      mode: auto
+      auto_mode: true
       size: 72
       max_lines: 3
       min_size: 36
@@ -55,4 +62,3 @@ ffmpeg:
   preset: fast
   crf: 25
   sample_rate: 44100
-
