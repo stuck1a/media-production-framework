@@ -13,7 +13,7 @@ subtitles:
   model: "D:/Programming Workspace/ClaudeWorkspace/whatsapp-transscriber/models/large-v3.pt"
   language: de
   file: "G:/Media/Musizieren/Rap/Track Workspace/Freudentränen/Stuck - Freudentränen.de_DE.srt"
-  source: "G:/Media/Musizieren/Rap/Track Workspace/Freudentränen/Freudentränen - Freudentränen (OLD).de_DE.srt"
+  #source: "G:/Media/Musizieren/Rap/Track Workspace/Freudentränen/Stuck - Freudentränen.de_DE.srt"
   max_line_length: 42
   max_alignment_failures_allowed: 1
   options:
@@ -44,11 +44,11 @@ rendering:
       name: Mistral
       auto_mode: true
       size: 72
-      max_lines: 3
-      min_size: 36
+      max_lines: 1
+      min_size: 24
       max_size: 84
-    color: "#FF2222"
-    bold: true
+    color: "#EEEEEE"
+    bold: false
     italic: false
     outline: 4
     shadow: 2
