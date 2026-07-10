@@ -43,7 +43,7 @@ from media_production_framework.text_renderer import (
     FontFileSet,
     FontSourceMeasurer,
     TextRenderer,
-    default_font_set,
+    resolve_font_set,
 )
 
 ProgressCallback = Callable[[RenderProgress], None]
@@ -178,19 +178,32 @@ class MoviePyRenderBackend:
         on_progress: ProgressCallback | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._fonts = fonts or default_font_set()
-        self._measurer = measurer or FontSourceMeasurer(self._fonts)
         self._on_progress = on_progress
         self._logger = logger or logging.getLogger(__name__)
-        self._layout_engine = LayoutEngine(self._measurer)
-        self._text_renderer = TextRenderer(self._fonts)
         self._command_builder = MoviePyCommandBuilder()
+        # Fonts are resolved from the job's configured family lazily (mirrors the
+        # FFmpeg backend); injected fonts/measurer take precedence for tests.
+        self._injected_fonts = fonts
+        self._injected_measurer = measurer
+        self._layout_engine: LayoutEngine | None = None
+        self._text_renderer: TextRenderer | None = None
+
+    def _components(self, job: RenderJob) -> tuple[LayoutEngine, TextRenderer]:
+        """Return the layout engine and text renderer for this job's font."""
+
+        if self._layout_engine is None or self._text_renderer is None:
+            fonts = self._injected_fonts or resolve_font_set(job.text.font, logger=self._logger)
+            measurer = self._injected_measurer or FontSourceMeasurer(fonts)
+            self._layout_engine = LayoutEngine(measurer)
+            self._text_renderer = TextRenderer(fonts)
+        return self._layout_engine, self._text_renderer
 
     def plan(self, job: RenderJob) -> RenderPlan:
         """Return the render plan, including the composition it would build."""
 
+        layout_engine, _ = self._components(job)
         base = _base_plan(job, self.name)
-        layouts = self._layout_document(job)
+        layouts = self._layout_document(job, layout_engine)
         specs = [
             _placement_spec(layout, job.text, Path(f"overlay-{layout.segment_index}.png"))
             for layout in layouts
@@ -209,10 +222,13 @@ class MoviePyRenderBackend:
                 "Install it with: pip install media-production-framework[moviepy]"
             ) from exc
 
+        layout_engine, text_renderer = self._components(job)
         plan = _base_plan(job, self.name)
 
         with TemporaryDirectory(prefix="mpf-moviepy-") as tmp_dir:
-            overlays = self._rasterize_overlays(job, Path(tmp_dir))
+            overlays = self._rasterize_overlays(
+                job, Path(tmp_dir), layout_engine, text_renderer
+            )
             background_clip = self._build_background_clip(job, plan)
 
             overlay_clips = [
@@ -293,17 +309,26 @@ class MoviePyRenderBackend:
             [canvas, resized.with_position(("center", "center"))], size=(width, height)
         )
 
-    def _layout_document(self, job: RenderJob) -> Sequence[SegmentLayout]:
-        return self._layout_engine.layout_document(
+    @staticmethod
+    def _layout_document(
+        job: RenderJob, layout_engine: LayoutEngine
+    ) -> Sequence[SegmentLayout]:
+        return layout_engine.layout_document(
             job.subtitle_document,
             job.text,
             job.settings.width,
             job.settings.height,
         )
 
-    def _rasterize_overlays(self, job: RenderJob, tmp_dir: Path) -> list[OverlaySpec]:
-        layouts = self._layout_document(job)
-        overlays = self._text_renderer.render_document(layouts, job.text)
+    def _rasterize_overlays(
+        self,
+        job: RenderJob,
+        tmp_dir: Path,
+        layout_engine: LayoutEngine,
+        text_renderer: TextRenderer,
+    ) -> list[OverlaySpec]:
+        layouts = self._layout_document(job, layout_engine)
+        overlays = text_renderer.render_document(layouts, job.text)
         specs: list[OverlaySpec] = []
         for layout in layouts:
             overlay = overlays[layout.segment_index]

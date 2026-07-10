@@ -47,7 +47,7 @@ from media_production_framework.text_renderer import (
     FontFileSet,
     FontSourceMeasurer,
     TextRenderer,
-    default_font_set,
+    resolve_font_set,
 )
 
 DEFAULT_FFMPEG_BINARY = "ffmpeg"
@@ -349,19 +349,38 @@ class FfmpegRenderBackend:
         logger: logging.Logger | None = None,
     ) -> None:
         self._binary = ffmpeg_binary
-        self._fonts = fonts or default_font_set()
-        self._measurer = measurer or FontSourceMeasurer(self._fonts)
         self._on_progress = on_progress
         self._logger = logger or logging.getLogger(__name__)
-        self._layout_engine = LayoutEngine(self._measurer)
-        self._text_renderer = TextRenderer(self._fonts)
         self._command_builder = FfmpegCommandBuilder()
+        # Fonts are resolved from the job's configured family lazily (the backend
+        # has no job at construction time); injected fonts/measurer, when given,
+        # take precedence and keep the render fully deterministic for tests.
+        self._injected_fonts = fonts
+        self._injected_measurer = measurer
+        self._layout_engine: LayoutEngine | None = None
+        self._text_renderer: TextRenderer | None = None
+
+    def _components(self, job: RenderJob) -> tuple[LayoutEngine, TextRenderer]:
+        """Return the layout engine and text renderer for this job's font.
+
+        Built once (and cached) from the configured font family, falling back to
+        the bundled font when the family cannot be located (see
+        :func:`resolve_font_set`).
+        """
+
+        if self._layout_engine is None or self._text_renderer is None:
+            fonts = self._injected_fonts or resolve_font_set(job.text.font, logger=self._logger)
+            measurer = self._injected_measurer or FontSourceMeasurer(fonts)
+            self._layout_engine = LayoutEngine(measurer)
+            self._text_renderer = TextRenderer(fonts)
+        return self._layout_engine, self._text_renderer
 
     def plan(self, job: RenderJob) -> RenderPlan:
         """Return the render plan, including the ffmpeg command it would run."""
 
+        layout_engine, _ = self._components(job)
         base = _base_plan(job, self.name)
-        layouts = self._layout_document(job)
+        layouts = self._layout_document(job, layout_engine)
         specs = [
             _placement_spec(layout, job.text, Path(f"overlay-{layout.segment_index}.png"))
             for layout in layouts
@@ -382,11 +401,12 @@ class FfmpegRenderBackend:
         """Compose and encode the video, returning the render result."""
 
         binary = resolve_ffmpeg_binary(self._binary)
+        layout_engine, text_renderer = self._components(job)
         plan = _base_plan(job, self.name)
 
         with TemporaryDirectory(prefix="mpf-render-") as tmp_dir:
             tmp_path = Path(tmp_dir)
-            overlays = self._rasterize_overlays(job, tmp_path)
+            overlays = self._rasterize_overlays(job, tmp_path, layout_engine, text_renderer)
             metadata_path: Path | None = None
             if plan.metadata:
                 metadata_path = tmp_path / "metadata.ffmeta"
@@ -415,17 +435,26 @@ class FfmpegRenderBackend:
             message="Rendered with ffmpeg.",
         )
 
-    def _layout_document(self, job: RenderJob) -> Sequence[SegmentLayout]:
-        return self._layout_engine.layout_document(
+    @staticmethod
+    def _layout_document(
+        job: RenderJob, layout_engine: LayoutEngine
+    ) -> Sequence[SegmentLayout]:
+        return layout_engine.layout_document(
             job.subtitle_document,
             job.text,
             job.settings.width,
             job.settings.height,
         )
 
-    def _rasterize_overlays(self, job: RenderJob, tmp_dir: Path) -> list[OverlaySpec]:
-        layouts = self._layout_document(job)
-        overlays = self._text_renderer.render_document(layouts, job.text)
+    def _rasterize_overlays(
+        self,
+        job: RenderJob,
+        tmp_dir: Path,
+        layout_engine: LayoutEngine,
+        text_renderer: TextRenderer,
+    ) -> list[OverlaySpec]:
+        layouts = self._layout_document(job, layout_engine)
+        overlays = text_renderer.render_document(layouts, job.text)
         specs: list[OverlaySpec] = []
         for layout in layouts:
             overlay = overlays[layout.segment_index]

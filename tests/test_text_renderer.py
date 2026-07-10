@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
 
-from media_production_framework.configuration import TextConfiguration
+from media_production_framework import text_renderer
+from media_production_framework.configuration import FontConfiguration, TextConfiguration
 from media_production_framework.layout import SegmentLayout, TextBox
 from media_production_framework.text_renderer import (
     DefaultFontSource,
@@ -12,6 +14,7 @@ from media_production_framework.text_renderer import (
     TextRenderer,
     TrueTypeFontFile,
     default_font_set,
+    resolve_font_set,
 )
 
 
@@ -158,10 +161,12 @@ def test_horizontal_alignment_orders_short_line_offset_left_to_right() -> None:
 
     def first_line_left_edge(horizontal: str) -> int:
         overlay = renderer.render(layout, text_config(horizontal=horizontal))
-        # Crop to the top portion of the image (roughly the first line's row
-        # band) and find the left edge of non-transparent pixels there.
-        half_height = max(overlay.image.size[1] // 2, 1)
-        band = overlay.image.crop((0, 0, overlay.image.size[0], half_height))
+        # Crop to the top third of the image so the band contains only the first
+        # line ("Hi"); the two lines are packed tightly, so a half-height band
+        # would catch the top scanline of the wide second line and mask the
+        # first line's alignment offset.
+        band_height = max(overlay.image.size[1] // 3, 1)
+        band = overlay.image.crop((0, 0, overlay.image.size[0], band_height))
         bbox = band.getbbox()
         assert bbox is not None
         return bbox[0]
@@ -205,3 +210,108 @@ def test_render_handles_degenerate_empty_line() -> None:
 
     assert overlay.image.size[0] >= 1
     assert overlay.image.size[1] >= 1
+
+
+def _stroked_ink_height(text: str, font_size: int, outline: int) -> int:
+    from PIL import Image, ImageDraw
+
+    font = DefaultFontSource().load(font_size)
+    draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    _, top, _, bottom = draw.textbbox((0, 0), text, font=font, stroke_width=outline)
+    return bottom - top
+
+
+def test_single_line_descenders_are_not_cropped() -> None:
+    # Regression: the renderer used to allocate `bottom - top` per line but draw
+    # from the ascender line, clipping the descenders (and outline) of the last
+    # line by the font's top bearing. The ink height must now equal the full
+    # stroked glyph height.
+    line = "gjpqy"
+    overlay = TextRenderer().render(layout_for(line, font_size=48), text_config(outline=4))
+
+    alpha_bbox = overlay.image.getchannel("A").getbbox()
+    assert alpha_bbox is not None
+    ink_height = alpha_bbox[3] - alpha_bbox[1]
+    assert ink_height == _stroked_ink_height(line, 48, outline=4)
+
+
+def test_last_line_descenders_preserved_in_multiline() -> None:
+    last = "gjpqy"
+    overlay = TextRenderer().render(
+        layout_for("Top line", last, font_size=48), text_config(outline=4)
+    )
+
+    first_height = _stroked_ink_height("Top line", 48, outline=4)
+    band = overlay.image.crop((0, first_height, overlay.image.size[0], overlay.image.size[1]))
+    alpha_bbox = band.getchannel("A").getbbox()
+    assert alpha_bbox is not None
+    ink_height = alpha_bbox[3] - alpha_bbox[1]
+    assert ink_height == _stroked_ink_height(last, 48, outline=4)
+
+
+# --- Font-name resolution -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("subfamily", "expected"),
+    [
+        ("Regular", "regular"),
+        ("Bold", "bold"),
+        ("Italic", "italic"),
+        ("Oblique", "italic"),
+        ("Bold Italic", "bold_italic"),
+        ("BoldOblique", "bold_italic"),
+        ("", "regular"),
+    ],
+)
+def test_style_key_classifies_subfamily(subfamily: str, expected: str) -> None:
+    assert text_renderer._style_key(subfamily) == expected
+
+
+def test_resolve_font_set_maps_generic_names_to_bundled_font() -> None:
+    fonts = resolve_font_set(FontConfiguration(name="Sans"))
+
+    assert isinstance(fonts.regular, DefaultFontSource)
+
+
+def test_resolve_font_set_falls_back_and_warns_for_unknown_font(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(text_renderer, "_font_variants", lambda name: None)
+
+    with caplog.at_level(logging.WARNING):
+        fonts = resolve_font_set(FontConfiguration(name="NoSuchFamily"))
+
+    assert isinstance(fonts.regular, DefaultFontSource)
+    assert any("NoSuchFamily" in record.message for record in caplog.records)
+
+
+def test_resolve_font_set_builds_variants_from_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    variants = {"regular": Path("reg.ttf"), "bold": Path("bold.ttf")}
+    monkeypatch.setattr(text_renderer, "_font_variants", lambda name: variants)
+
+    fonts = resolve_font_set(FontConfiguration(name="Mistral"))
+
+    assert isinstance(fonts.regular, TrueTypeFontFile)
+    assert fonts.regular.path == Path("reg.ttf")
+    assert isinstance(fonts.bold, TrueTypeFontFile)
+    assert fonts.italic is None
+    assert fonts.bold_italic is None
+
+
+def test_resolve_font_set_uses_explicit_file_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A name that is an existing font-file path is used directly, without a scan.
+    font_file = tmp_path / "custom.ttf"
+    font_file.write_bytes(b"")  # contents are irrelevant; only the path resolves here
+
+    def fail(_name: str) -> None:  # pragma: no cover - must not be called
+        raise AssertionError("system fonts must not be scanned for an explicit path")
+
+    monkeypatch.setattr(text_renderer, "_font_variants", fail)
+
+    fonts = resolve_font_set(FontConfiguration(name=str(font_file)))
+
+    assert isinstance(fonts.regular, TrueTypeFontFile)
+    assert fonts.regular.path == font_file
